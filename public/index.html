@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monster Demolition Derby</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+canvas { display: block; }
+
+/* START SCREEN */
+#startScreen {
+  position: fixed; inset: 0; z-index: 100;
+  background: linear-gradient(135deg, #1a0a2e 0%, #16213e 50%, #0f3460 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #fff;
+}
+#startScreen h1 {
+  font-size: clamp(2rem, 6vw, 4.5rem); font-weight: 900;
+  text-transform: uppercase; letter-spacing: 4px;
+  background: linear-gradient(90deg, #ff6b35, #f7c948, #ff6b35);
+  background-size: 200% auto;
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  animation: shimmer 2s linear infinite;
+  text-shadow: none; margin-bottom: 8px;
+}
+#startScreen h2 {
+  font-size: clamp(0.9rem, 2vw, 1.3rem); color: #aaa;
+  margin-bottom: 30px; font-weight: 400;
+}
+@keyframes shimmer { to { background-position: 200% center; } }
+
+.section-label {
+  font-size: 0.85rem; text-transform: uppercase; letter-spacing: 3px;
+  color: #888; margin-bottom: 10px; margin-top: 20px;
+}
+
+/* COLOR PICKER */
+#colorPicker {
+  display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; justify-content: center;
+}
+.color-swatch {
+  width: 50px; height: 50px; border-radius: 12px; cursor: pointer;
+  border: 3px solid transparent; transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.color-swatch:hover { transform: scale(1.15); }
+.color-swatch.selected { border-color: #fff; transform: scale(1.2); box-shadow: 0 0 20px rgba(255,255,255,0.4); }
+
+/* DIFFICULTY */
+#difficultyPicker {
+  display: flex; gap: 10px; margin-bottom: 10px;
+}
+.diff-btn {
+  padding: 10px 28px; border-radius: 25px; border: 2px solid #555;
+  background: transparent; color: #ccc; font-size: 1rem; cursor: pointer;
+  transition: all 0.2s; font-weight: 600;
+}
+.diff-btn:hover { border-color: #f7c948; color: #f7c948; }
+.diff-btn.selected { background: #f7c948; color: #1a0a2e; border-color: #f7c948; }
+
+/* START BUTTON */
+#startBtn {
+  margin-top: 25px; padding: 16px 60px; font-size: 1.4rem; font-weight: 800;
+  border: none; border-radius: 50px; cursor: pointer;
+  background: linear-gradient(135deg, #ff6b35, #e74c3c);
+  color: #fff; letter-spacing: 2px; text-transform: uppercase;
+  box-shadow: 0 4px 25px rgba(255,107,53,0.5);
+  transition: all 0.2s;
+}
+#startBtn:hover { transform: scale(1.05); box-shadow: 0 6px 35px rgba(255,107,53,0.7); }
+
+/* CONTROLS INFO */
+#controlsInfo {
+  margin-top: 25px; background: rgba(255,255,255,0.05); border-radius: 12px;
+  padding: 15px 25px; font-size: 0.8rem; color: #888; line-height: 1.8;
+  text-align: center;
+}
+#controlsInfo span { color: #f7c948; font-weight: 600; }
+
+/* HUD */
+#hud {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+  padding: 15px 20px; display: none;
+  pointer-events: none;
+}
+#healthBarOuter {
+  width: 250px; height: 22px; background: rgba(0,0,0,0.6);
+  border-radius: 11px; border: 2px solid rgba(255,255,255,0.3);
+  overflow: hidden;
+}
+#healthBarInner {
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, #2ecc71, #27ae60);
+  border-radius: 9px; transition: width 0.3s;
+}
+#boostCount {
+  color: #f7c948; font-size: 1.1rem; font-weight: 700;
+  margin-top: 8px;
+}
+#truckStatus {
+  position: fixed; top: 15px; right: 20px; z-index: 50;
+  display: none; text-align: right;
+}
+.truck-indicator {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+  justify-content: flex-end;
+}
+.truck-dot {
+  width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.3);
+}
+.truck-hp {
+  font-size: 0.7rem; color: #ccc; width: 70px;
+  background: rgba(0,0,0,0.4); border-radius: 4px; height: 8px;
+  overflow: hidden;
+}
+.truck-hp-inner { height: 100%; background: #2ecc71; transition: width 0.3s; }
+
+/* SPEED INDICATOR */
+#speedIndicator {
+  position: fixed; bottom: 20px; left: 20px; z-index: 50;
+  color: #fff; font-size: 1.2rem; font-weight: 700;
+  display: none; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+}
+
+/* END SCREEN */
+#endScreen {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,0.85);
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  color: #fff;
+}
+#endScreen h1 { font-size: 3rem; margin-bottom: 15px; }
+#endScreen p { font-size: 1.3rem; color: #ccc; margin-bottom: 30px; }
+#restartBtn {
+  padding: 14px 50px; font-size: 1.2rem; font-weight: 700;
+  border: none; border-radius: 50px; cursor: pointer;
+  background: linear-gradient(135deg, #f7c948, #ff6b35);
+  color: #1a0a2e; letter-spacing: 1px; text-transform: uppercase;
+  transition: all 0.2s;
+}
+#restartBtn:hover { transform: scale(1.05); }
+
+/* COUNTDOWN */
+#countdown {
+  position: fixed; inset: 0; z-index: 90;
+  display: none; align-items: center; justify-content: center;
+  font-size: 8rem; font-weight: 900; color: #f7c948;
+  text-shadow: 0 0 40px rgba(247,201,72,0.6);
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<!-- START SCREEN -->
+<div id="startScreen">
+  <h1>Monster Demolition Derby</h1>
+  <h2>Smash. Crash. Be the Last Truck Standing.</h2>
+
+  <div class="section-label">Pick Your Truck</div>
+  <div id="colorPicker"></div>
+
+  <div class="section-label">Difficulty</div>
+  <div id="difficultyPicker">
+    <button class="diff-btn" data-diff="easy">Easy</button>
+    <button class="diff-btn selected" data-diff="medium">Medium</button>
+    <button class="diff-btn" data-diff="hard">Hard</button>
+  </div>
+
+  <button id="startBtn">START</button>
+
+  <div id="controlsInfo">
+    <span>↑↓←→</span> Drive &amp; Steer &nbsp;|&nbsp;
+    <span>SPACE</span> Jump &nbsp;|&nbsp;
+    <span>ENTER</span> Boost (x3) &nbsp;|&nbsp;
+    Last truck alive wins!
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="healthBarOuter"><div id="healthBarInner"></div></div>
+  <div id="boostCount">BOOST: ⚡⚡⚡</div>
+</div>
+<div id="truckStatus"></div>
+<div id="speedIndicator"></div>
+
+<!-- COUNTDOWN -->
+<div id="countdown"></div>
+
+<!-- END SCREEN -->
+<div id="endScreen">
+  <h1 id="endTitle"></h1>
+  <p id="endMessage"></p>
+  <button id="restartBtn">PLAY AGAIN</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ============================================================
+// MONSTER DEMOLITION DERBY - Full Game
+// ============================================================
+
+// --- CONSTANTS ---
+const ARENA_RADIUS = 85;
+const WALL_HEIGHT = 8;
+const TRUCK_COLORS = [
+  '#e74c3c', '#3498db', '#2ecc71', '#f39c12',
+  '#9b59b6', '#e91e63', '#00bcd4', '#ff9800'
+];
+const TRUCK_COLOR_NAMES = [
+  'Red', 'Blue', 'Green', 'Orange',
+  'Purple', 'Pink', 'Cyan', 'Amber'
+];
+const MAX_HEALTH = 100;
+const BOOST_FORCE = 2.5;
+const JUMP_FORCE = 0.35;
+const GRAVITY = -0.015;
+const GROUND_Y = 1.5;
+const MAX_SPEED = 0.8;
+const ACCELERATION = 0.018;
+const BRAKE_FORCE = 0.025;
+const REVERSE_MAX = 0.35;
+const TURN_SPEED = 0.04;
+const FRICTION = 0.985;
+const HIT_SELF_DAMAGE_RATIO = 0.15;
+
+// --- GAME STATE ---
+let scene, camera, renderer;
+let playerIndex = 0;
+let difficulty = 'medium';
+let trucks = [];
+let obstacles = [];
+let ramps = [];
+let gameRunning = false;
+let keys = {};
+let boostsLeft = 3;
+let eliminationOrder = [];
+let confettiParticles = [];
+
+// --- AUDIO CONTEXT ---
+let audioCtx;
+function initAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function playSound(type) {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const gain = audioCtx.createGain();
+  gain.connect(audioCtx.destination);
+
+  if (type === 'crash') {
+    // White noise burst
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.15, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    gain.gain.setValueAtTime(0.4, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+    src.connect(gain); src.start(now);
+  } else if (type === 'boost') {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.exponentialRampToValueAtTime(600, now + 0.3);
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+    osc.connect(gain); osc.start(now); osc.stop(now + 0.4);
+  } else if (type === 'jump') {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(200, now);
+    osc.frequency.exponentialRampToValueAtTime(500, now + 0.15);
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+    osc.connect(gain); osc.start(now); osc.stop(now + 0.2);
+  } else if (type === 'land') {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(100, now);
+    osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+    osc.connect(gain); osc.start(now); osc.stop(now + 0.2);
+  } else if (type === 'eliminate') {
+    // Explosion
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    gain.gain.setValueAtTime(0.5, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+    src.connect(gain); src.start(now);
+  } else if (type === 'victory') {
+    [523, 659, 784, 1047].forEach((freq, i) => {
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(0, now + i * 0.15);
+      g.gain.linearRampToValueAtTime(0.15, now + i * 0.15 + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.4);
+      osc.connect(g); g.connect(audioCtx.destination);
+      osc.start(now + i * 0.15); osc.stop(now + i * 0.15 + 0.4);
+    });
+  } else if (type === 'cheer') {
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.8, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1) * 0.15 * Math.sin(i / data.length * Math.PI);
+    }
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'bandpass'; filter.frequency.value = 2000; filter.Q.value = 0.5;
+    gain.gain.setValueAtTime(0.3, now);
+    src.connect(filter); filter.connect(gain); src.start(now);
+  }
+}
+
+// --- ENGINE SOUND ---
+let engineOsc, engineGain;
+function startEngineSound() {
+  if (!audioCtx) return;
+  engineOsc = audioCtx.createOscillator();
+  engineGain = audioCtx.createGain();
+  engineOsc.type = 'sawtooth';
+  engineOsc.frequency.value = 55;
+  engineGain.gain.value = 0.06;
+  engineOsc.connect(engineGain);
+  engineGain.connect(audioCtx.destination);
+  engineOsc.start();
+}
+function updateEngineSound(speed) {
+  if (!engineOsc) return;
+  engineOsc.frequency.value = 55 + Math.abs(speed) * 200;
+  engineGain.gain.value = 0.04 + Math.abs(speed) * 0.08;
+}
+function stopEngineSound() {
+  if (engineOsc) { try { engineOsc.stop(); } catch(e){} engineOsc = null; }
+}
+
+// --- CROWD AMBIENT ---
+let crowdSource, crowdGain;
+function startCrowdAmbient() {
+  if (!audioCtx) return;
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 4, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * 0.08 * (0.7 + 0.3 * Math.sin(i / audioCtx.sampleRate * 2));
+  }
+  crowdSource = audioCtx.createBufferSource();
+  crowdSource.buffer = buf;
+  crowdSource.loop = true;
+  crowdGain = audioCtx.createGain();
+  crowdGain.gain.value = 0.12;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'bandpass'; filter.frequency.value = 1500; filter.Q.value = 0.3;
+  crowdSource.connect(filter);
+  filter.connect(crowdGain);
+  crowdGain.connect(audioCtx.destination);
+  crowdSource.start();
+}
+function stopCrowdAmbient() {
+  if (crowdSource) { try { crowdSource.stop(); } catch(e){} crowdSource = null; }
+}
+
+// --- COLOR PICKER ---
+const colorPickerEl = document.getElementById('colorPicker');
+TRUCK_COLORS.forEach((c, i) => {
+  const swatch = document.createElement('div');
+  swatch.className = 'color-swatch' + (i === 0 ? ' selected' : '');
+  swatch.style.background = c;
+  swatch.title = TRUCK_COLOR_NAMES[i];
+  swatch.onclick = () => {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+    swatch.classList.add('selected');
+    playerIndex = i;
+  };
+  colorPickerEl.appendChild(swatch);
+});
+
+// --- DIFFICULTY PICKER ---
+document.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    difficulty = btn.dataset.diff;
+  };
+});
+
+// --- START / RESTART ---
+document.getElementById('startBtn').onclick = startGame;
+document.getElementById('restartBtn').onclick = () => {
+  document.getElementById('endScreen').style.display = 'none';
+  document.getElementById('startScreen').style.display = 'flex';
+};
+
+// --- KEYBOARD ---
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ============================================================
+// BUILD SCENE
+// ============================================================
+function buildScene() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x1a0a2e);
+  scene.fog = new THREE.Fog(0x1a0a2e, 120, 200);
+
+  // LIGHTS
+  const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+  scene.add(ambient);
+  const dirLight = new THREE.DirectionalLight(0xfff4e0, 0.8);
+  dirLight.position.set(30, 50, 20);
+  dirLight.castShadow = true;
+  scene.add(dirLight);
+
+  // Stadium spotlights
+  const spotColors = [0xff6b35, 0xf7c948, 0x3498db, 0x2ecc71];
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2;
+    const spot = new THREE.SpotLight(spotColors[i], 0.6, 200, 0.5, 0.5);
+    spot.position.set(Math.cos(angle) * 70, 40, Math.sin(angle) * 70);
+    spot.target.position.set(0, 0, 0);
+    scene.add(spot);
+    scene.add(spot.target);
+
+    // Light pole
+    const poleGeo = new THREE.CylinderGeometry(0.3, 0.5, 40, 6);
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+    const pole = new THREE.Mesh(poleGeo, poleMat);
+    pole.position.set(Math.cos(angle) * 72, 20, Math.sin(angle) * 72);
+    scene.add(pole);
+
+    // Light fixture
+    const fixGeo = new THREE.BoxGeometry(3, 1, 3);
+    const fixMat = new THREE.MeshStandardMaterial({ color: spotColors[i], emissive: spotColors[i], emissiveIntensity: 0.8 });
+    const fix = new THREE.Mesh(fixGeo, fixMat);
+    fix.position.set(Math.cos(angle) * 70, 40, Math.sin(angle) * 70);
+    scene.add(fix);
+  }
+
+  // GROUND — dirt arena
+  const groundGeo = new THREE.CircleGeometry(ARENA_RADIUS, 64);
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 1.0 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = 0;
+  scene.add(ground);
+
+  // Dirt texture lines
+  for (let i = 0; i < 30; i++) {
+    const len = 5 + Math.random() * 20;
+    const lineGeo = new THREE.PlaneGeometry(len, 0.3 + Math.random() * 0.5);
+    const lineMat = new THREE.MeshStandardMaterial({ color: 0x7a5c10, roughness: 1 });
+    const line = new THREE.Mesh(lineGeo, lineMat);
+    line.rotation.x = -Math.PI / 2;
+    line.rotation.z = Math.random() * Math.PI;
+    const dist = Math.random() * (ARENA_RADIUS - 10);
+    const ang = Math.random() * Math.PI * 2;
+    line.position.set(Math.cos(ang) * dist, 0.01, Math.sin(ang) * dist);
+    scene.add(line);
+  }
+
+  // WALLS — stadium barrier
+  const wallSegments = 48;
+  for (let i = 0; i < wallSegments; i++) {
+    const angle = (i / wallSegments) * Math.PI * 2;
+    const nextAngle = ((i + 1) / wallSegments) * Math.PI * 2;
+    const wallGeo = new THREE.BoxGeometry(
+      2 * ARENA_RADIUS * Math.sin(Math.PI / wallSegments), WALL_HEIGHT, 2
+    );
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: i % 2 === 0 ? 0xcc3333 : 0xeeeeee
+    });
+    const wall = new THREE.Mesh(wallGeo, wallMat);
+    const midAngle = (angle + nextAngle) / 2;
+    wall.position.set(
+      Math.cos(midAngle) * (ARENA_RADIUS + 0.5),
+      WALL_HEIGHT / 2,
+      Math.sin(midAngle) * (ARENA_RADIUS + 0.5)
+    );
+    wall.rotation.y = -midAngle + Math.PI / 2;
+    scene.add(wall);
+  }
+
+  // STADIUM STANDS
+  for (let tier = 0; tier < 3; tier++) {
+    const r = ARENA_RADIUS + 5 + tier * 8;
+    const h = WALL_HEIGHT + tier * 5;
+    const standGeo = new THREE.TorusGeometry(r, 3, 4, 48);
+    const standMat = new THREE.MeshStandardMaterial({
+      color: tier === 0 ? 0x555555 : tier === 1 ? 0x444444 : 0x333333
+    });
+    const stand = new THREE.Mesh(standGeo, standMat);
+    stand.rotation.x = Math.PI / 2;
+    stand.position.y = h;
+    scene.add(stand);
+
+    // Fans — colored dots in the stands
+    const fanCount = 80 + tier * 40;
+    for (let f = 0; f < fanCount; f++) {
+      const ang = (f / fanCount) * Math.PI * 2;
+      const fanGeo = new THREE.SphereGeometry(0.4, 4, 4);
+      const fanColor = [0xff6b35, 0xf7c948, 0x3498db, 0xe74c3c, 0x2ecc71, 0xff69b4, 0xffffff][Math.floor(Math.random() * 7)];
+      const fanMat = new THREE.MeshStandardMaterial({ color: fanColor });
+      const fan = new THREE.Mesh(fanGeo, fanMat);
+      fan.position.set(
+        Math.cos(ang) * (r + (Math.random() - 0.5) * 4),
+        h + 1.5 + Math.random() * 2,
+        Math.sin(ang) * (r + (Math.random() - 0.5) * 4)
+      );
+      fan.userData.baseY = fan.position.y;
+      fan.userData.bobSpeed = 2 + Math.random() * 3;
+      fan.userData.bobAmp = 0.2 + Math.random() * 0.3;
+      scene.add(fan);
+      obstacles.push({ mesh: fan, type: 'fan' }); // for animation
+    }
+  }
+
+  // TITLE SIGN
+  // Large billboard behind the stands
+  const signGeo = new THREE.BoxGeometry(40, 8, 1);
+  const signMat = new THREE.MeshStandardMaterial({ color: 0x1a0a2e });
+  const sign = new THREE.Mesh(signGeo, signMat);
+  sign.position.set(0, 28, -(ARENA_RADIUS + 25));
+  scene.add(sign);
+
+  // Sign border glow
+  const signBorderGeo = new THREE.BoxGeometry(42, 9, 0.5);
+  const signBorderMat = new THREE.MeshStandardMaterial({ color: 0xf7c948, emissive: 0xf7c948, emissiveIntensity: 0.5 });
+  const signBorder = new THREE.Mesh(signBorderGeo, signBorderMat);
+  signBorder.position.set(0, 28, -(ARENA_RADIUS + 25.3));
+  scene.add(signBorder);
+
+  // RAMPS
+  const rampPositions = [
+    { x: 25, z: 0, ry: 0 },
+    { x: -25, z: 0, ry: Math.PI },
+    { x: 0, z: 25, ry: Math.PI / 2 },
+    { x: 0, z: -25, ry: -Math.PI / 2 },
+  ];
+  rampPositions.forEach(rp => {
+    const rampGeo = new THREE.BoxGeometry(8, 2, 10);
+    const rampMat = new THREE.MeshStandardMaterial({ color: 0xd4a017 });
+    const ramp = new THREE.Mesh(rampGeo, rampMat);
+    ramp.position.set(rp.x, 1, rp.z);
+    ramp.rotation.y = rp.ry;
+
+    // Tilted top
+    const topGeo = new THREE.BoxGeometry(8, 0.3, 10);
+    const topMat = new THREE.MeshStandardMaterial({ color: 0xe6b422 });
+    const top = new THREE.Mesh(topGeo, topMat);
+    top.position.set(0, 1.1, -1);
+    top.rotation.x = -0.25;
+    ramp.add(top);
+
+    scene.add(ramp);
+    ramps.push({
+      mesh: ramp,
+      x: rp.x, z: rp.z,
+      halfW: 4, halfD: 5,
+      ry: rp.ry
+    });
+  });
+
+  // CRATES
+  for (let i = 0; i < 15; i++) {
+    const size = 1.2 + Math.random() * 1.5;
+    const crateGeo = new THREE.BoxGeometry(size, size, size);
+    const crateMat = new THREE.MeshStandardMaterial({ color: 0xc8a25c });
+    const crate = new THREE.Mesh(crateGeo, crateMat);
+    const dist = 10 + Math.random() * 55;
+    const ang = Math.random() * Math.PI * 2;
+    crate.position.set(Math.cos(ang) * dist, size / 2, Math.sin(ang) * dist);
+    crate.rotation.y = Math.random() * Math.PI;
+
+    // Crate cross detail
+    const stripGeo = new THREE.BoxGeometry(size * 0.1, size, size * 1.02);
+    const stripMat = new THREE.MeshStandardMaterial({ color: 0x8B6914 });
+    const strip1 = new THREE.Mesh(stripGeo, stripMat);
+    crate.add(strip1);
+    const strip2 = new THREE.Mesh(new THREE.BoxGeometry(size * 1.02, size, size * 0.1), stripMat);
+    crate.add(strip2);
+
+    scene.add(crate);
+    obstacles.push({ mesh: crate, type: 'crate', vx: 0, vz: 0, size, active: true });
+  }
+
+  // BARRELS
+  for (let i = 0; i < 20; i++) {
+    const barrelGeo = new THREE.CylinderGeometry(0.7, 0.7, 1.8, 12);
+    const barrelColor = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12][i % 4];
+    const barrelMat = new THREE.MeshStandardMaterial({ color: barrelColor });
+    const barrel = new THREE.Mesh(barrelGeo, barrelMat);
+    const dist = 8 + Math.random() * 60;
+    const ang = Math.random() * Math.PI * 2;
+    barrel.position.set(Math.cos(ang) * dist, 0.9, Math.sin(ang) * dist);
+
+    // Barrel band
+    const bandGeo = new THREE.TorusGeometry(0.72, 0.06, 4, 12);
+    const bandMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+    const band1 = new THREE.Mesh(bandGeo, bandMat);
+    band1.position.y = 0.4;
+    band1.rotation.x = Math.PI / 2;
+    barrel.add(band1);
+    const band2 = band1.clone();
+    band2.position.y = -0.4;
+    barrel.add(band2);
+
+    scene.add(barrel);
+    obstacles.push({ mesh: barrel, type: 'barrel', vx: 0, vz: 0, active: true });
+  }
+}
+
+// ============================================================
+// BUILD TRUCK
+// ============================================================
+function createTruck(color, index) {
+  const group = new THREE.Group();
+
+  // Body
+  const bodyGeo = new THREE.BoxGeometry(2.8, 1.4, 4.5);
+  const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.4 });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.y = 0.7;
+  group.add(body);
+
+  // Cab/roof
+  const cabGeo = new THREE.BoxGeometry(2.4, 1.0, 2.2);
+  const cabMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.4 });
+  const cab = new THREE.Mesh(cabGeo, cabMat);
+  cab.position.set(0, 1.9, -0.3);
+  group.add(cab);
+
+  // Windshield
+  const windGeo = new THREE.BoxGeometry(2.0, 0.7, 0.1);
+  const windMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, roughness: 0.1, metalness: 0.6, transparent: true, opacity: 0.7 });
+  const wind = new THREE.Mesh(windGeo, windMat);
+  wind.position.set(0, 1.85, 0.85);
+  wind.rotation.x = 0.15;
+  group.add(wind);
+
+  // Headlights
+  [-0.9, 0.9].forEach(x => {
+    const hlGeo = new THREE.SphereGeometry(0.2, 8, 8);
+    const hlMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffcc, emissiveIntensity: 0.8 });
+    const hl = new THREE.Mesh(hlGeo, hlMat);
+    hl.position.set(x, 0.8, 2.3);
+    group.add(hl);
+  });
+
+  // Wheels — big monster truck wheels
+  const wheelGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.6, 12);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+  const hubGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.62, 8);
+  const hubMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8 });
+
+  const wheelPositions = [
+    { x: -1.6, y: 0, z: 1.4 },
+    { x: 1.6, y: 0, z: 1.4 },
+    { x: -1.6, y: 0, z: -1.4 },
+    { x: 1.6, y: 0, z: -1.4 }
+  ];
+  const wheels = [];
+  wheelPositions.forEach(wp => {
+    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(wp.x, wp.y, wp.z);
+    group.add(wheel);
+    const hub = new THREE.Mesh(hubGeo, hubMat);
+    hub.rotation.z = Math.PI / 2;
+    hub.position.set(wp.x, wp.y, wp.z);
+    group.add(hub);
+    wheels.push(wheel);
+  });
+
+  // Exhaust pipes
+  [-0.8, 0.8].forEach(x => {
+    const exGeo = new THREE.CylinderGeometry(0.12, 0.15, 1.2, 6);
+    const exMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.8 });
+    const ex = new THREE.Mesh(exGeo, exMat);
+    ex.position.set(x, 1.8, -2.0);
+    group.add(ex);
+  });
+
+  // Roll cage hint
+  const cageGeo = new THREE.BoxGeometry(2.6, 0.08, 0.08);
+  const cageMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.9 });
+  [1.5, 2.3].forEach(y => {
+    const bar = new THREE.Mesh(cageGeo, cageMat);
+    bar.position.set(0, y, -1.4);
+    group.add(bar);
+  });
+
+  group.position.y = GROUND_Y;
+  scene.add(group);
+
+  return {
+    mesh: group,
+    wheels,
+    color,
+    index,
+    health: MAX_HEALTH,
+    speed: 0,
+    rotationY: 0,
+    vy: 0,
+    onGround: true,
+    alive: true,
+    boosts: 3,
+    boosting: false,
+    boostTimer: 0,
+    jumpCooldown: 0,
+    // AI
+    aiTimer: 0,
+    aiTargetAngle: 0,
+    aiAccel: false,
+    aiTarget: null,
+    // Flash on hit
+    flashTimer: 0,
+    // Smoke particles
+    smokeParticles: []
+  };
+}
+
+// ============================================================
+// PLACE TRUCKS
+// ============================================================
+function placeTrucks() {
+  trucks = [];
+  eliminationOrder = [];
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const dist = 35;
+    const t = createTruck(TRUCK_COLORS[i], i);
+    t.mesh.position.x = Math.cos(angle) * dist;
+    t.mesh.position.z = Math.sin(angle) * dist;
+    t.rotationY = angle + Math.PI; // face center
+    t.mesh.rotation.y = t.rotationY;
+    trucks.push(t);
+  }
+  boostsLeft = 3;
+}
+
+// ============================================================
+// CAMERA
+// ============================================================
+function setupCamera() {
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 300);
+}
+function updateCamera() {
+  const player = trucks[playerIndex];
+  if (!player) return;
+  const dist = 12;
+  const height = 7;
+  const targetX = player.mesh.position.x - Math.sin(player.rotationY) * dist;
+  const targetZ = player.mesh.position.z - Math.cos(player.rotationY) * dist;
+  const targetY = player.mesh.position.y + height;
+  camera.position.x += (targetX - camera.position.x) * 0.08;
+  camera.position.y += (targetY - camera.position.y) * 0.08;
+  camera.position.z += (targetZ - camera.position.z) * 0.08;
+  camera.lookAt(player.mesh.position.x, player.mesh.position.y + 1, player.mesh.position.z);
+}
+
+// ============================================================
+// PHYSICS / COLLISION
+// ============================================================
+function truckCollision(a, b) {
+  if (!a.alive || !b.alive) return;
+  const dx = a.mesh.position.x - b.mesh.position.x;
+  const dz = a.mesh.position.z - b.mesh.position.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  const minDist = 3.5;
+  if (dist < minDist && dist > 0.01) {
+    const overlap = minDist - dist;
+    const nx = dx / dist;
+    const nz = dz / dist;
+
+    // Push apart
+    a.mesh.position.x += nx * overlap * 0.5;
+    a.mesh.position.z += nz * overlap * 0.5;
+    b.mesh.position.x -= nx * overlap * 0.5;
+    b.mesh.position.z -= nz * overlap * 0.5;
+
+    // Relative speed
+    const aVx = Math.sin(a.rotationY) * a.speed;
+    const aVz = Math.cos(a.rotationY) * a.speed;
+    const bVx = Math.sin(b.rotationY) * b.speed;
+    const bVz = Math.cos(b.rotationY) * b.speed;
+    const relVx = aVx - bVx;
+    const relVz = aVz - bVz;
+    const impactSpeed = Math.abs(relVx * nx + relVz * nz);
+
+    // Directness factor (1 = head on, 0 = glancing)
+    const directness = Math.min(1, impactSpeed / 0.8);
+
+    // Damage
+    const baseDamage = impactSpeed * 40 * directness;
+    const selfDamage = baseDamage * HIT_SELF_DAMAGE_RATIO;
+
+    // The one getting hit takes more damage
+    if (Math.abs(a.speed) > Math.abs(b.speed)) {
+      b.health -= baseDamage;
+      a.health -= selfDamage;
+    } else {
+      a.health -= baseDamage;
+      b.health -= selfDamage;
+    }
+    a.health = Math.max(0, a.health);
+    b.health = Math.max(0, b.health);
+
+    // Bounce
+    const bounce = 0.3 + impactSpeed * 0.5;
+    a.speed *= -0.3;
+    b.speed *= -0.3;
+    a.mesh.position.x += nx * bounce;
+    a.mesh.position.z += nz * bounce;
+    b.mesh.position.x -= nx * bounce;
+    b.mesh.position.z -= nz * bounce;
+
+    // Flash
+    a.flashTimer = 8;
+    b.flashTimer = 8;
+
+    if (baseDamage > 2) playSound('crash');
+  }
+}
+
+function wallCollision(t) {
+  const dx = t.mesh.position.x;
+  const dz = t.mesh.position.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist > ARENA_RADIUS - 2) {
+    const nx = dx / dist;
+    const nz = dz / dist;
+    t.mesh.position.x = nx * (ARENA_RADIUS - 2);
+    t.mesh.position.z = nz * (ARENA_RADIUS - 2);
+    t.speed *= -0.4;
+    t.health -= Math.abs(t.speed) * 8;
+    t.health = Math.max(0, t.health);
+    if (Math.abs(t.speed) > 0.1) playSound('crash');
+  }
+}
+
+function obstacleCollision(t) {
+  obstacles.forEach(ob => {
+    if (ob.type === 'fan') return;
+    if (!ob.active) return;
+    const dx = t.mesh.position.x - ob.mesh.position.x;
+    const dz = t.mesh.position.z - ob.mesh.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    const minD = ob.type === 'barrel' ? 2.0 : 2.5;
+    if (dist < minD && dist > 0.01) {
+      const nx = dx / dist;
+      const nz = dz / dist;
+      // Push obstacle
+      ob.vx = (ob.vx || 0) + nx * Math.abs(t.speed) * 2;
+      ob.vz = (ob.vz || 0) + nz * Math.abs(t.speed) * 2;
+      t.speed *= 0.85;
+      t.mesh.position.x += nx * (minD - dist);
+      t.mesh.position.z += nz * (minD - dist);
+    }
+  });
+}
+
+function updateObstacles() {
+  obstacles.forEach(ob => {
+    if (ob.type === 'fan') {
+      // Bob fans
+      const t = performance.now() / 1000;
+      ob.mesh.position.y = ob.mesh.userData.baseY + Math.sin(t * ob.mesh.userData.bobSpeed) * ob.mesh.userData.bobAmp;
+      return;
+    }
+    if (!ob.active) return;
+    if (ob.vx || ob.vz) {
+      ob.mesh.position.x += (ob.vx || 0);
+      ob.mesh.position.z += (ob.vz || 0);
+      ob.vx *= 0.92;
+      ob.vz *= 0.92;
+      ob.mesh.rotation.y += (ob.vx || 0) * 0.5;
+      if (Math.abs(ob.vx) < 0.001) ob.vx = 0;
+      if (Math.abs(ob.vz) < 0.001) ob.vz = 0;
+
+      // Keep in arena
+      const d = Math.sqrt(ob.mesh.position.x ** 2 + ob.mesh.position.z ** 2);
+      if (d > ARENA_RADIUS - 1) {
+        const n = 1 / d;
+        ob.mesh.position.x *= (ARENA_RADIUS - 1) * n;
+        ob.mesh.position.z *= (ARENA_RADIUS - 1) * n;
+        ob.vx *= -0.3;
+        ob.vz *= -0.3;
+      }
+    }
+  });
+}
+
+function checkRamp(t) {
+  ramps.forEach(r => {
+    const dx = t.mesh.position.x - r.x;
+    const dz = t.mesh.position.z - r.z;
+    if (Math.abs(dx) < r.halfW + 1.5 && Math.abs(dz) < r.halfD + 1.5) {
+      if (t.onGround && Math.abs(t.speed) > 0.15) {
+        t.vy = Math.abs(t.speed) * 0.4;
+        t.onGround = false;
+        playSound('jump');
+      }
+    }
+  });
+}
+
+// ============================================================
+// AI
+// ============================================================
+function updateAI(t, dt) {
+  if (!t.alive || t.index === playerIndex) return;
+
+  t.aiTimer -= dt;
+  if (t.aiTimer <= 0) {
+    // Pick behavior based on difficulty
+    const aliveTrucks = trucks.filter(tr => tr.alive && tr.index !== t.index);
+    if (aliveTrucks.length === 0) return;
+
+    if (difficulty === 'easy') {
+      t.aiTimer = 1.5 + Math.random() * 2;
+      // Random wander, occasionally target someone
+      if (Math.random() < 0.3) {
+        const target = aliveTrucks[Math.floor(Math.random() * aliveTrucks.length)];
+        t.aiTargetAngle = Math.atan2(
+          target.mesh.position.x - t.mesh.position.x,
+          target.mesh.position.z - t.mesh.position.z
+        );
+      } else {
+        t.aiTargetAngle = t.rotationY + (Math.random() - 0.5) * 1.5;
+      }
+      t.aiAccel = Math.random() < 0.7;
+    } else if (difficulty === 'medium') {
+      t.aiTimer = 0.8 + Math.random() * 1.2;
+      // Hunt nearest
+      let nearest = null, nearDist = Infinity;
+      aliveTrucks.forEach(tr => {
+        const d = Math.hypot(tr.mesh.position.x - t.mesh.position.x, tr.mesh.position.z - t.mesh.position.z);
+        if (d < nearDist) { nearDist = d; nearest = tr; }
+      });
+      if (nearest) {
+        t.aiTargetAngle = Math.atan2(
+          nearest.mesh.position.x - t.mesh.position.x,
+          nearest.mesh.position.z - t.mesh.position.z
+        );
+        // Add slight randomness
+        t.aiTargetAngle += (Math.random() - 0.5) * 0.4;
+      }
+      t.aiAccel = true;
+    } else { // hard
+      t.aiTimer = 0.5 + Math.random() * 0.8;
+      // Target weakest truck
+      let weakest = null, minHp = Infinity;
+      aliveTrucks.forEach(tr => {
+        if (tr.health < minHp) { minHp = tr.health; weakest = tr; }
+      });
+      if (weakest) {
+        t.aiTargetAngle = Math.atan2(
+          weakest.mesh.position.x - t.mesh.position.x,
+          weakest.mesh.position.z - t.mesh.position.z
+        );
+        // Try to dodge if something coming fast at us
+        const playerTruck = trucks[playerIndex];
+        if (playerTruck.alive) {
+          const dToPlayer = Math.hypot(playerTruck.mesh.position.x - t.mesh.position.x, playerTruck.mesh.position.z - t.mesh.position.z);
+          if (dToPlayer < 15 && Math.abs(playerTruck.speed) > 0.3) {
+            t.aiTargetAngle += (Math.random() > 0.5 ? 1 : -1) * 0.8;
+          }
+        }
+      }
+      t.aiAccel = true;
+      // Hard AI uses boost occasionally
+      if (t.boosts > 0 && Math.random() < 0.05) {
+        t.boosting = true;
+        t.boostTimer = 20;
+        t.boosts--;
+      }
+    }
+  }
+
+  // Steer toward target angle
+  let angleDiff = t.aiTargetAngle - t.rotationY;
+  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+  const turnAmt = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), TURN_SPEED);
+  t.rotationY += turnAmt;
+
+  // Accelerate
+  if (t.aiAccel) {
+    const maxSpd = difficulty === 'easy' ? MAX_SPEED * 0.55 : difficulty === 'medium' ? MAX_SPEED * 0.75 : MAX_SPEED * 0.9;
+    t.speed = Math.min(t.speed + ACCELERATION * 0.8, maxSpd);
+  } else {
+    t.speed *= 0.98;
+  }
+}
+
+// ============================================================
+// SMOKE / PARTICLES
+// ============================================================
+function spawnSmoke(x, y, z, color) {
+  const geo = new THREE.SphereGeometry(0.3, 4, 4);
+  const mat = new THREE.MeshBasicMaterial({ color: color || 0x888888, transparent: true, opacity: 0.6 });
+  const p = new THREE.Mesh(geo, mat);
+  p.position.set(x, y, z);
+  scene.add(p);
+  return { mesh: p, life: 30, vy: 0.05 + Math.random() * 0.05, vx: (Math.random() - 0.5) * 0.1, vz: (Math.random() - 0.5) * 0.1 };
+}
+
+let smokeParticles = [];
+function updateSmoke() {
+  for (let i = smokeParticles.length - 1; i >= 0; i--) {
+    const p = smokeParticles[i];
+    p.life--;
+    p.mesh.position.y += p.vy;
+    p.mesh.position.x += p.vx;
+    p.mesh.position.z += p.vz;
+    p.mesh.scale.multiplyScalar(1.03);
+    p.mesh.material.opacity = p.life / 30 * 0.5;
+    if (p.life <= 0) {
+      scene.remove(p.mesh);
+      smokeParticles.splice(i, 1);
+    }
+  }
+}
+
+// ============================================================
+// CONFETTI
+// ============================================================
+function spawnConfetti() {
+  for (let i = 0; i < 120; i++) {
+    const geo = new THREE.BoxGeometry(0.3, 0.3, 0.05);
+    const mat = new THREE.MeshBasicMaterial({
+      color: [0xff6b35, 0xf7c948, 0x3498db, 0x2ecc71, 0xe74c3c, 0xff69b4][i % 6]
+    });
+    const p = new THREE.Mesh(geo, mat);
+    const player = trucks[playerIndex];
+    p.position.set(
+      player.mesh.position.x + (Math.random() - 0.5) * 10,
+      player.mesh.position.y + 5 + Math.random() * 10,
+      player.mesh.position.z + (Math.random() - 0.5) * 10
+    );
+    scene.add(p);
+    confettiParticles.push({
+      mesh: p,
+      vy: -0.02 - Math.random() * 0.05,
+      vr: (Math.random() - 0.5) * 0.2,
+      life: 200
+    });
+  }
+}
+
+function updateConfetti() {
+  for (let i = confettiParticles.length - 1; i >= 0; i--) {
+    const c = confettiParticles[i];
+    c.mesh.position.y += c.vy;
+    c.mesh.rotation.x += c.vr;
+    c.mesh.rotation.z += c.vr * 0.7;
+    c.life--;
+    if (c.life <= 0 || c.mesh.position.y < 0) {
+      scene.remove(c.mesh);
+      confettiParticles.splice(i, 1);
+    }
+  }
+}
+
+// ============================================================
+// HUD
+// ============================================================
+function updateHUD() {
+  const player = trucks[playerIndex];
+  if (!player) return;
+
+  // Health bar
+  const pct = Math.max(0, player.health / MAX_HEALTH * 100);
+  const bar = document.getElementById('healthBarInner');
+  bar.style.width = pct + '%';
+  if (pct > 50) bar.style.background = 'linear-gradient(90deg, #2ecc71, #27ae60)';
+  else if (pct > 25) bar.style.background = 'linear-gradient(90deg, #f39c12, #e67e22)';
+  else bar.style.background = 'linear-gradient(90deg, #e74c3c, #c0392b)';
+
+  // Boosts
+  const boostStr = 'BOOST: ' + '⚡'.repeat(boostsLeft) + '·'.repeat(3 - boostsLeft);
+  document.getElementById('boostCount').textContent = boostStr;
+
+  // Speed
+  const speed = Math.abs(player.speed);
+  const mph = Math.round(speed * 150);
+  document.getElementById('speedIndicator').textContent = mph + ' MPH';
+
+  // Truck status panel
+  const statusEl = document.getElementById('truckStatus');
+  let html = '';
+  trucks.forEach((t, i) => {
+    const hp = Math.max(0, t.health / MAX_HEALTH * 100);
+    const isPlayer = i === playerIndex;
+    const label = isPlayer ? '► YOU' : '';
+    const opacity = t.alive ? 1 : 0.3;
+    html += `<div class="truck-indicator" style="opacity:${opacity}">
+      <span style="color:#ccc;font-size:0.65rem;width:35px;text-align:right">${label}</span>
+      <div class="truck-hp"><div class="truck-hp-inner" style="width:${hp}%;background:${t.alive ? (hp > 50 ? '#2ecc71' : hp > 25 ? '#f39c12' : '#e74c3c') : '#555'}"></div></div>
+      <div class="truck-dot" style="background:${t.color}"></div>
+    </div>`;
+  });
+  statusEl.innerHTML = html;
+}
+
+// ============================================================
+// GAME LOOP
+// ============================================================
+let lastTime = 0;
+function gameLoop(time) {
+  if (!gameRunning) return;
+  requestAnimationFrame(gameLoop);
+
+  const dt = Math.min((time - lastTime) / 16.67, 3); // normalize to ~60fps
+  lastTime = time;
+
+  const player = trucks[playerIndex];
+
+  // --- PLAYER INPUT ---
+  if (player.alive) {
+    if (keys['ArrowUp']) {
+      player.speed = Math.min(player.speed + ACCELERATION, MAX_SPEED);
+    }
+    if (keys['ArrowDown']) {
+      if (player.speed > 0) {
+        player.speed -= BRAKE_FORCE;
+        if (player.speed < 0) player.speed = 0;
+      } else {
+        player.speed = Math.max(player.speed - ACCELERATION * 0.6, -REVERSE_MAX);
+      }
+    }
+    if (!keys['ArrowUp'] && !keys['ArrowDown']) {
+      player.speed *= FRICTION;
+    }
+    if (keys['ArrowLeft']) player.rotationY += TURN_SPEED * (player.speed > 0 ? 1 : player.speed < 0 ? -1 : 0);
+    if (keys['ArrowRight']) player.rotationY -= TURN_SPEED * (player.speed > 0 ? 1 : player.speed < 0 ? -1 : 0);
+
+    // Jump
+    if (keys['Space'] && player.onGround && player.jumpCooldown <= 0) {
+      player.vy = JUMP_FORCE;
+      player.onGround = false;
+      player.jumpCooldown = 25;
+      playSound('jump');
+    }
+    if (player.jumpCooldown > 0) player.jumpCooldown--;
+
+    // Boost
+    if (keys['Enter'] && boostsLeft > 0 && !player.boosting) {
+      player.boosting = true;
+      player.boostTimer = 25;
+      boostsLeft--;
+      playSound('boost');
+    }
+  }
+
+  // --- UPDATE ALL TRUCKS ---
+  trucks.forEach((t, i) => {
+    if (!t.alive) return;
+
+    // AI
+    if (i !== playerIndex) updateAI(t, dt * 0.016);
+
+    // Boost
+    if (t.boosting) {
+      t.speed = Math.min(t.speed + ACCELERATION * 3, MAX_SPEED * 1.6);
+      t.boostTimer--;
+      if (t.boostTimer <= 0) t.boosting = false;
+      // Boost smoke
+      if (Math.random() < 0.5) {
+        smokeParticles.push(spawnSmoke(
+          t.mesh.position.x - Math.sin(t.rotationY) * 2.5 + (Math.random() - 0.5),
+          t.mesh.position.y + 0.5,
+          t.mesh.position.z - Math.cos(t.rotationY) * 2.5 + (Math.random() - 0.5),
+          0xff6b35
+        ));
+      }
+    }
+
+    // Move
+    t.mesh.position.x += Math.sin(t.rotationY) * t.speed * dt;
+    t.mesh.position.z += Math.cos(t.rotationY) * t.speed * dt;
+    t.mesh.rotation.y = t.rotationY;
+
+    // Gravity / jump
+    if (!t.onGround) {
+      t.vy += GRAVITY * dt;
+      t.mesh.position.y += t.vy * dt;
+      if (t.mesh.position.y <= GROUND_Y) {
+        t.mesh.position.y = GROUND_Y;
+        t.vy = 0;
+        t.onGround = true;
+        if (i === playerIndex) playSound('land');
+      }
+    }
+
+    // Ramp check
+    checkRamp(t);
+
+    // Wall collision
+    wallCollision(t);
+
+    // Obstacle collision
+    obstacleCollision(t);
+
+    // Spin wheels
+    t.wheels.forEach(w => { w.rotation.x += t.speed * 0.5; });
+
+    // Flash on hit
+    if (t.flashTimer > 0) {
+      t.flashTimer--;
+      t.mesh.children[0].material.emissive = new THREE.Color(0xffffff);
+      t.mesh.children[0].material.emissiveIntensity = t.flashTimer % 2 === 0 ? 0.8 : 0;
+    } else {
+      t.mesh.children[0].material.emissive = new THREE.Color(0x000000);
+      t.mesh.children[0].material.emissiveIntensity = 0;
+    }
+
+    // Tire smoke when driving
+    if (Math.abs(t.speed) > 0.2 && t.onGround && Math.random() < 0.15) {
+      smokeParticles.push(spawnSmoke(
+        t.mesh.position.x + (Math.random() - 0.5) * 2,
+        0.5,
+        t.mesh.position.z + (Math.random() - 0.5) * 2,
+        0x8B6914
+      ));
+    }
+
+    // Check elimination
+    if (t.health <= 0 && t.alive) {
+      t.alive = false;
+      t.speed = 0;
+      eliminationOrder.push(t.index);
+      playSound('eliminate');
+      playSound('cheer');
+
+      // Smoke burst
+      for (let s = 0; s < 15; s++) {
+        smokeParticles.push(spawnSmoke(
+          t.mesh.position.x + (Math.random() - 0.5) * 3,
+          t.mesh.position.y + Math.random() * 2,
+          t.mesh.position.z + (Math.random() - 0.5) * 3,
+          0x333333
+        ));
+      }
+
+      // Tilt the dead truck
+      t.mesh.rotation.z = (Math.random() - 0.5) * 0.3;
+      t.mesh.rotation.x = (Math.random() - 0.5) * 0.2;
+    }
+  });
+
+  // --- TRUCK vs TRUCK COLLISION ---
+  for (let i = 0; i < trucks.length; i++) {
+    for (let j = i + 1; j < trucks.length; j++) {
+      truckCollision(trucks[i], trucks[j]);
+    }
+  }
+
+  // --- UPDATE ---
+  updateObstacles();
+  updateSmoke();
+  updateConfetti();
+  updateCamera();
+  updateHUD();
+  updateEngineSound(player.alive ? player.speed : 0);
+
+  // --- WIN/LOSE CHECK ---
+  const aliveTrucks = trucks.filter(t => t.alive);
+  if (aliveTrucks.length <= 1) {
+    endGame(aliveTrucks.length === 1 && aliveTrucks[0].index === playerIndex);
+  }
+
+  renderer.render(scene, camera);
+}
+
+// ============================================================
+// START / END
+// ============================================================
+function startGame() {
+  initAudio();
+
+  // Clean up previous game
+  if (scene) {
+    while (scene.children.length > 0) scene.remove(scene.children[0]);
+  }
+  obstacles = [];
+  ramps = [];
+  smokeParticles = [];
+  confettiParticles = [];
+
+  if (!renderer) {
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+  }
+
+  setupCamera();
+  buildScene();
+  placeTrucks();
+
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('endScreen').style.display = 'none';
+  document.getElementById('hud').style.display = 'block';
+  document.getElementById('truckStatus').style.display = 'block';
+  document.getElementById('speedIndicator').style.display = 'block';
+
+  // Countdown
+  const cdEl = document.getElementById('countdown');
+  cdEl.style.display = 'flex';
+  let count = 3;
+  cdEl.textContent = count;
+
+  const cdInterval = setInterval(() => {
+    count--;
+    if (count > 0) {
+      cdEl.textContent = count;
+    } else if (count === 0) {
+      cdEl.textContent = 'GO!';
+      cdEl.style.color = '#2ecc71';
+    } else {
+      clearInterval(cdInterval);
+      cdEl.style.display = 'none';
+      cdEl.style.color = '#f7c948';
+      gameRunning = true;
+      lastTime = performance.now();
+      startEngineSound();
+      startCrowdAmbient();
+      requestAnimationFrame(gameLoop);
+    }
+  }, 800);
+
+  // Render during countdown
+  function countdownRender() {
+    if (gameRunning) return;
+    updateCamera();
+    renderer.render(scene, camera);
+    requestAnimationFrame(countdownRender);
+  }
+  countdownRender();
+}
+
+function endGame(won) {
+  gameRunning = false;
+  stopEngineSound();
+  stopCrowdAmbient();
+
+  if (won) {
+    playSound('victory');
+    spawnConfetti();
+    document.getElementById('endTitle').textContent = '🏆 YOU WIN! 🏆';
+    document.getElementById('endTitle').style.color = '#f7c948';
+    document.getElementById('endMessage').textContent = 'You are the last truck standing!';
+
+    // Keep rendering for confetti
+    function victoryLoop() {
+      updateConfetti();
+      updateCamera();
+      renderer.render(scene, camera);
+      if (confettiParticles.length > 0) requestAnimationFrame(victoryLoop);
+    }
+    requestAnimationFrame(victoryLoop);
+  } else {
+    const position = 8 - eliminationOrder.indexOf(playerIndex);
+    const suffix = position === 1 ? 'st' : position === 2 ? 'nd' : position === 3 ? 'rd' : 'th';
+    document.getElementById('endTitle').textContent = 'GAME OVER';
+    document.getElementById('endTitle').style.color = '#e74c3c';
+    document.getElementById('endMessage').textContent = `You finished ${position}${suffix} out of 8!`;
+  }
+
+  setTimeout(() => {
+    document.getElementById('endScreen').style.display = 'flex';
+  }, won ? 1500 : 800);
+}
+
+// --- RESIZE ---
+window.addEventListener('resize', () => {
+  if (!camera || !renderer) return;
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+</script>
+</body>
+</html>
