@@ -371,6 +371,21 @@ function stopCrowdAmbient() {
   if (crowdSource) { try { crowdSource.stop(); } catch(e){} crowdSource = null; }
 }
 
+// --- BACKGROUND MUSIC ---
+let bgMusic;
+function startBgMusic() {
+  if (!bgMusic) {
+    bgMusic = new Audio('music.mp3');
+    bgMusic.loop = true;
+    bgMusic.volume = 0.4;
+  }
+  bgMusic.currentTime = 0;
+  bgMusic.play().catch(e => {});
+}
+function stopBgMusic() {
+  if (bgMusic) { bgMusic.pause(); }
+}
+
 // --- COLOR PICKER ---
 const colorPickerEl = document.getElementById('colorPicker');
 TRUCK_COLORS.forEach((c, i) => {
@@ -1525,6 +1540,7 @@ function startGame() {
       lastTime = performance.now();
       startEngineSound();
       startCrowdAmbient();
+      startBgMusic();
       requestAnimationFrame(gameLoop);
     }
   }, 800);
@@ -1543,6 +1559,7 @@ function endGame(won) {
   gameRunning = false;
   stopEngineSound();
   stopCrowdAmbient();
+  stopBgMusic();
 
   if (won) {
     playSound('victory');
