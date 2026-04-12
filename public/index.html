@@ -391,14 +391,21 @@ function playSound(type) {
   gain.connect(audioCtx.destination);
 
   if (type === 'crash') {
-    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.15, audioCtx.sampleRate);
+    // Softer metallic thud instead of harsh noise burst
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.25, audioCtx.sampleRate);
     const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    for (let i = 0; i < data.length; i++) {
+      const t2 = i / audioCtx.sampleRate;
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-t2 * 20) * 0.4
+              + Math.sin(t2 * 120 * Math.PI * 2) * Math.exp(-t2 * 15) * 0.3;
+    }
     const src = audioCtx.createBufferSource();
     src.buffer = buf;
-    gain.gain.setValueAtTime(0.4, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-    src.connect(gain); src.start(now);
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass'; filter.frequency.value = 800;
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+    src.connect(filter); filter.connect(gain); src.start(now);
   } else if (type === 'boost') {
     const osc = audioCtx.createOscillator();
     osc.type = 'sawtooth';
@@ -459,45 +466,36 @@ function playSound(type) {
   }
 }
 
-// --- ENGINE SOUND ---
+// --- ENGINE SOUND (soft rumble) ---
 let engineNodes = [];
 let engineMasterGain;
 function startEngineSound() {
   if (!audioCtx) return;
   engineMasterGain = audioCtx.createGain();
-  engineMasterGain.gain.value = 0.08;
+  engineMasterGain.gain.value = 0.04;
   engineMasterGain.connect(audioCtx.destination);
 
+  // Soft sine-based engine hum
   const osc1 = audioCtx.createOscillator();
-  osc1.type = 'square';
-  osc1.frequency.value = 28;
+  osc1.type = 'sine';
+  osc1.frequency.value = 35;
   const g1 = audioCtx.createGain();
-  g1.gain.value = 0.3;
+  g1.gain.value = 0.4;
   osc1.connect(g1);
   g1.connect(engineMasterGain);
   osc1.start();
 
+  // Gentle overtone
   const osc2 = audioCtx.createOscillator();
-  osc2.type = 'sawtooth';
-  osc2.frequency.value = 56;
+  osc2.type = 'sine';
+  osc2.frequency.value = 70;
   const g2 = audioCtx.createGain();
   g2.gain.value = 0.15;
-  const dist = audioCtx.createWaveShaperFunction ? null : audioCtx.createWaveShaper();
-  if (dist) {
-    const curve = new Float32Array(256);
-    for (let i = 0; i < 256; i++) {
-      const x = (i / 128) - 1;
-      curve[i] = (Math.PI + 200) * x / (Math.PI + 200 * Math.abs(x));
-    }
-    dist.curve = curve;
-    osc2.connect(dist);
-    dist.connect(g2);
-  } else {
-    osc2.connect(g2);
-  }
+  osc2.connect(g2);
   g2.connect(engineMasterGain);
   osc2.start();
 
+  // Very quiet filtered rumble
   const bufLen = audioCtx.sampleRate * 2;
   const noiseBuf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
   const noiseData = noiseBuf.getChannelData(0);
@@ -507,28 +505,28 @@ function startEngineSound() {
   noiseSrc.loop = true;
   const noiseFilter = audioCtx.createBiquadFilter();
   noiseFilter.type = 'lowpass';
-  noiseFilter.frequency.value = 120;
-  noiseFilter.Q.value = 5;
+  noiseFilter.frequency.value = 80;
+  noiseFilter.Q.value = 1;
   const g3 = audioCtx.createGain();
-  g3.gain.value = 0.25;
+  g3.gain.value = 0.1;
   noiseSrc.connect(noiseFilter);
   noiseFilter.connect(g3);
   g3.connect(engineMasterGain);
   noiseSrc.start();
 
   engineNodes = [
-    { osc: osc1, gain: g1, base: 28 },
-    { osc: osc2, gain: g2, base: 56 },
+    { osc: osc1, gain: g1, base: 35 },
+    { osc: osc2, gain: g2, base: 70 },
     { src: noiseSrc, gain: g3, filter: noiseFilter }
   ];
 }
 function updateEngineSound(speed) {
   if (!engineNodes.length) return;
   const s = Math.abs(speed);
-  if (engineNodes[0].osc) engineNodes[0].osc.frequency.value = 28 + s * 80;
-  if (engineNodes[1].osc) engineNodes[1].osc.frequency.value = 56 + s * 160;
-  if (engineNodes[2].filter) engineNodes[2].filter.frequency.value = 120 + s * 400;
-  if (engineMasterGain) engineMasterGain.gain.value = 0.06 + s * 0.12;
+  if (engineNodes[0].osc) engineNodes[0].osc.frequency.value = 35 + s * 50;
+  if (engineNodes[1].osc) engineNodes[1].osc.frequency.value = 70 + s * 100;
+  if (engineNodes[2].filter) engineNodes[2].filter.frequency.value = 80 + s * 200;
+  if (engineMasterGain) engineMasterGain.gain.value = 0.03 + s * 0.06;
 }
 function stopEngineSound() {
   engineNodes.forEach(n => {
@@ -2349,7 +2347,11 @@ function gameLoop(time) {
     wallCollision(t);
     obstacleCollision(t);
 
-    t.wheels.forEach(w => { w.rotation.x += t.speed * 0.5; });
+    // Only spin wheels for monster truck mode (box geometry wheels)
+    // GLB models have pre-oriented wheels that don't need manual rotation
+    if (gameMode === 'monster') {
+      t.wheels.forEach(w => { w.rotation.x += t.speed * 0.5; });
+    }
 
     if (t.flashTimer > 0) {
       t.flashTimer--;
