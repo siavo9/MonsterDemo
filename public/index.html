@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monster Demolition Derby</title>
+<title>Zak's Monster Truck Demolition Derby</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
@@ -156,7 +156,7 @@ canvas { display: block; }
 
 <!-- START SCREEN -->
 <div id="startScreen">
-  <h1>Monster Demolition Derby</h1>
+  <h1>Zak's Monster Truck Demolition Derby</h1>
   <h2>Smash. Crash. Be the Last Truck Standing.</h2>
 
   <div class="section-label">Pick Your Truck</div>
@@ -628,25 +628,41 @@ function buildScene() {
 function createTruck(color, index) {
   const group = new THREE.Group();
 
-  // Body
+  // Body — raised high on the suspension
   const bodyGeo = new THREE.BoxGeometry(2.8, 1.4, 4.5);
   const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.4 });
   const body = new THREE.Mesh(bodyGeo, bodyMat);
-  body.position.y = 0.7;
+  body.position.y = 1.2;
   group.add(body);
+
+  // Suspension/axle bars connecting body to wheels
+  const axleMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.7 });
+  [1.5, -1.5].forEach(z => {
+    const axleGeo = new THREE.BoxGeometry(3.8, 0.2, 0.2);
+    const axle = new THREE.Mesh(axleGeo, axleMat);
+    axle.position.set(0, 0.1, z);
+    group.add(axle);
+    // Vertical struts
+    [-1.4, 1.4].forEach(x => {
+      const strutGeo = new THREE.BoxGeometry(0.15, 1.2, 0.15);
+      const strut = new THREE.Mesh(strutGeo, axleMat);
+      strut.position.set(x, 0.6, z);
+      group.add(strut);
+    });
+  });
 
   // Cab/roof
   const cabGeo = new THREE.BoxGeometry(2.4, 1.0, 2.2);
   const cabMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.4 });
   const cab = new THREE.Mesh(cabGeo, cabMat);
-  cab.position.set(0, 1.9, -0.3);
+  cab.position.set(0, 2.4, -0.3);
   group.add(cab);
 
   // Windshield
   const windGeo = new THREE.BoxGeometry(2.0, 0.7, 0.1);
   const windMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, roughness: 0.1, metalness: 0.6, transparent: true, opacity: 0.7 });
   const wind = new THREE.Mesh(windGeo, windMat);
-  wind.position.set(0, 1.85, 0.85);
+  wind.position.set(0, 2.35, 0.85);
   wind.rotation.x = 0.15;
   group.add(wind);
 
@@ -655,21 +671,24 @@ function createTruck(color, index) {
     const hlGeo = new THREE.SphereGeometry(0.2, 8, 8);
     const hlMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffcc, emissiveIntensity: 0.8 });
     const hl = new THREE.Mesh(hlGeo, hlMat);
-    hl.position.set(x, 0.8, 2.3);
+    hl.position.set(x, 1.3, 2.3);
     group.add(hl);
   });
 
-  // Wheels — big monster truck wheels
-  const wheelGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.6, 12);
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-  const hubGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.62, 8);
+  // Wheels — massive monster truck wheels
+  const wheelGeo = new THREE.CylinderGeometry(1.4, 1.4, 1.0, 16);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
+  const hubGeo = new THREE.CylinderGeometry(0.5, 0.5, 1.02, 8);
   const hubMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8 });
+  // Tire tread ring for extra detail
+  const treadGeo = new THREE.TorusGeometry(1.4, 0.12, 4, 16);
+  const treadMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
 
   const wheelPositions = [
-    { x: -1.6, y: 0, z: 1.4 },
-    { x: 1.6, y: 0, z: 1.4 },
-    { x: -1.6, y: 0, z: -1.4 },
-    { x: 1.6, y: 0, z: -1.4 }
+    { x: -1.8, y: -0.4, z: 1.5 },
+    { x: 1.8, y: -0.4, z: 1.5 },
+    { x: -1.8, y: -0.4, z: -1.5 },
+    { x: 1.8, y: -0.4, z: -1.5 }
   ];
   const wheels = [];
   wheelPositions.forEach(wp => {
@@ -681,22 +700,27 @@ function createTruck(color, index) {
     hub.rotation.z = Math.PI / 2;
     hub.position.set(wp.x, wp.y, wp.z);
     group.add(hub);
+    // Treads
+    const tread = new THREE.Mesh(treadGeo, treadMat);
+    tread.rotation.y = Math.PI / 2;
+    tread.position.set(wp.x, wp.y, wp.z);
+    group.add(tread);
     wheels.push(wheel);
   });
 
   // Exhaust pipes
   [-0.8, 0.8].forEach(x => {
-    const exGeo = new THREE.CylinderGeometry(0.12, 0.15, 1.2, 6);
+    const exGeo = new THREE.CylinderGeometry(0.12, 0.15, 1.5, 6);
     const exMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.8 });
     const ex = new THREE.Mesh(exGeo, exMat);
-    ex.position.set(x, 1.8, -2.0);
+    ex.position.set(x, 2.4, -2.0);
     group.add(ex);
   });
 
   // Roll cage hint
   const cageGeo = new THREE.BoxGeometry(2.6, 0.08, 0.08);
   const cageMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.9 });
-  [1.5, 2.3].forEach(y => {
+  [2.0, 2.8].forEach(y => {
     const bar = new THREE.Mesh(cageGeo, cageMat);
     bar.position.set(0, y, -1.4);
     group.add(bar);
