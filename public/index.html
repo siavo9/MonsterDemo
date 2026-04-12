@@ -277,6 +277,25 @@ function preloadAllGLBModels() {
   }));
 }
 
+// Deep clone a GLTF scene preserving materials and textures
+function deepCloneGLTF(source) {
+  const clone = source.clone();
+  const sourceMeshes = [];
+  const cloneMeshes = [];
+  source.traverse(node => { if (node.isMesh) sourceMeshes.push(node); });
+  clone.traverse(node => { if (node.isMesh) cloneMeshes.push(node); });
+  for (let i = 0; i < cloneMeshes.length; i++) {
+    // Copy material with all its maps from the source
+    const srcMat = sourceMeshes[i].material;
+    if (Array.isArray(srcMat)) {
+      cloneMeshes[i].material = srcMat.map(m => m.clone());
+    } else if (srcMat) {
+      cloneMeshes[i].material = srcMat.clone();
+    }
+  }
+  return clone;
+}
+
 function createGLBCar(charIndex, index) {
   const char = CARS2_CHARACTERS[charIndex];
   const template = glbModelCache[char.glb];
@@ -292,7 +311,8 @@ function createGLBCar(charIndex, index) {
     return { mesh: group, wheels: [], color: char.color, charName: char.name, index };
   }
 
-  const model = template.clone();
+  // Deep clone using SkeletonUtils-style clone to preserve materials & textures
+  const model = deepCloneGLTF(template);
 
   // Compute bounding box to auto-scale
   const bbox = new THREE.Box3().setFromObject(model);
@@ -321,10 +341,6 @@ function createGLBCar(charIndex, index) {
     if (child.isMesh) {
       child.castShadow = true;
       child.receiveShadow = true;
-      // Deep clone materials so each car instance is independent
-      if (child.material) {
-        child.material = child.material.clone ? child.material.clone() : child.material;
-      }
     }
     // Try to find wheel parts by name for spinning
     if (child.name && child.name.toLowerCase().includes('wheel')) {
