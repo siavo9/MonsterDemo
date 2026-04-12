@@ -847,56 +847,30 @@ function createTruck(color, index) {
     group.add(tip);
   });
 
-  // === MASSIVE MONSTER TRUCK WHEELS ===
+  // === MASSIVE MONSTER TRUCK WHEELS — clean round tires ===
   const wheelRadius = 1.5;
   const wheelWidth = 1.2;
-  // Outer tire
-  const wheelGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelWidth, 20);
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
-  // Inner tire wall (slightly different shade)
-  const sidewallGeo = new THREE.CylinderGeometry(wheelRadius + 0.02, wheelRadius + 0.02, wheelWidth * 0.85, 20);
-  const sidewallMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.95 });
-  // Hub
-  const hubGeo = new THREE.CylinderGeometry(0.55, 0.55, wheelWidth + 0.04, 8);
+  // Tire (torus for that chunky rounded look)
+  const tireGeo = new THREE.TorusGeometry(wheelRadius, wheelWidth / 2, 16, 24);
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+  // Hub disc
+  const hubGeo = new THREE.CylinderGeometry(0.6, 0.6, wheelWidth * 0.3, 12);
   const hubMat = new THREE.MeshStandardMaterial({ color: 0xddaa00, metalness: 0.8, roughness: 0.2 });
-  // Hub center bolt
-  const boltGeo = new THREE.CylinderGeometry(0.2, 0.2, wheelWidth + 0.08, 3);
-  const boltMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.9 });
-  // Tread ridges
-  const treadGeo = new THREE.BoxGeometry(0.15, wheelRadius * 2.05, wheelWidth * 0.6);
-  const treadMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1.0 });
 
   const wheels = [];
   wheelPositions.forEach(wp => {
-    // Main tire
-    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-    wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(wp.x, wp.y, wp.z);
-    group.add(wheel);
-    // Sidewall
-    const sw = new THREE.Mesh(sidewallGeo, sidewallMat);
-    sw.rotation.z = Math.PI / 2;
-    sw.position.set(wp.x, wp.y, wp.z);
-    group.add(sw);
-    // Golden hub
+    // Chunky tire
+    const tire = new THREE.Mesh(tireGeo, tireMat);
+    tire.rotation.z = Math.PI / 2;
+    tire.rotation.y = Math.PI / 2;
+    tire.position.set(wp.x, wp.y, wp.z);
+    group.add(tire);
+    // Golden hub on each side
     const hub = new THREE.Mesh(hubGeo, hubMat);
     hub.rotation.z = Math.PI / 2;
     hub.position.set(wp.x, wp.y, wp.z);
     group.add(hub);
-    // Center bolt
-    const bolt = new THREE.Mesh(boltGeo, boltMat);
-    bolt.rotation.z = Math.PI / 2;
-    bolt.position.set(wp.x, wp.y, wp.z);
-    group.add(bolt);
-    // Tread pattern (8 ridges around the tire)
-    for (let t = 0; t < 8; t++) {
-      const angle = (t / 8) * Math.PI * 2;
-      const tread = new THREE.Mesh(treadGeo, treadMat);
-      tread.position.set(wp.x, wp.y + Math.cos(angle) * wheelRadius, wp.z + Math.sin(angle) * wheelRadius);
-      tread.rotation.x = angle;
-      group.add(tread);
-    }
-    wheels.push(wheel);
+    wheels.push(tire);
   });
 
   // === ROLL CAGE ===
