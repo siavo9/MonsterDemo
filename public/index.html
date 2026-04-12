@@ -17,13 +17,14 @@ canvas { display: block; }
   color: #fff;
 }
 #startScreen h1 {
-  font-size: clamp(2rem, 6vw, 4.5rem); font-weight: 900;
+  font-size: clamp(1.8rem, 5vw, 3.5rem); font-weight: 900;
   text-transform: uppercase; letter-spacing: 4px;
   background: linear-gradient(90deg, #ff6b35, #f7c948, #ff6b35);
   background-size: 200% auto;
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   animation: shimmer 2s linear infinite;
   text-shadow: none; margin-bottom: 8px;
+  text-align: center; max-width: 90%;
 }
 #startScreen h2 {
   font-size: clamp(0.9rem, 2vw, 1.3rem); color: #aaa;
@@ -156,7 +157,7 @@ canvas { display: block; }
 
 <!-- START SCREEN -->
 <div id="startScreen">
-  <h1>Zak's Monster Truck Demolition Derby</h1>
+  <h1>Zak's Monster Truck<br>Demolition Derby</h1>
   <h2>Smash. Crash. Be the Last Truck Standing.</h2>
 
   <div class="section-label">Pick Your Truck</div>
