@@ -324,26 +324,89 @@ function playSound(type) {
   }
 }
 
-// --- ENGINE SOUND ---
-let engineOsc, engineGain;
+// --- ENGINE SOUND (deep rumbling V8) ---
+let engineNodes = [];
+let engineMasterGain;
 function startEngineSound() {
   if (!audioCtx) return;
-  engineOsc = audioCtx.createOscillator();
-  engineGain = audioCtx.createGain();
-  engineOsc.type = 'sawtooth';
-  engineOsc.frequency.value = 55;
-  engineGain.gain.value = 0.06;
-  engineOsc.connect(engineGain);
-  engineGain.connect(audioCtx.destination);
-  engineOsc.start();
+  engineMasterGain = audioCtx.createGain();
+  engineMasterGain.gain.value = 0.08;
+  engineMasterGain.connect(audioCtx.destination);
+
+  // Layer 1: low rumble base
+  const osc1 = audioCtx.createOscillator();
+  osc1.type = 'square';
+  osc1.frequency.value = 28;
+  const g1 = audioCtx.createGain();
+  g1.gain.value = 0.3;
+  osc1.connect(g1);
+  g1.connect(engineMasterGain);
+  osc1.start();
+
+  // Layer 2: mid growl
+  const osc2 = audioCtx.createOscillator();
+  osc2.type = 'sawtooth';
+  osc2.frequency.value = 56;
+  const g2 = audioCtx.createGain();
+  g2.gain.value = 0.15;
+  const dist = audioCtx.createWaveShaperFunction ? null : audioCtx.createWaveShaper();
+  if (dist) {
+    const curve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) {
+      const x = (i / 128) - 1;
+      curve[i] = (Math.PI + 200) * x / (Math.PI + 200 * Math.abs(x));
+    }
+    dist.curve = curve;
+    osc2.connect(dist);
+    dist.connect(g2);
+  } else {
+    osc2.connect(g2);
+  }
+  g2.connect(engineMasterGain);
+  osc2.start();
+
+  // Layer 3: filtered noise for exhaust rumble
+  const bufLen = audioCtx.sampleRate * 2;
+  const noiseBuf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+  const noiseData = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) noiseData[i] = Math.random() * 2 - 1;
+  const noiseSrc = audioCtx.createBufferSource();
+  noiseSrc.buffer = noiseBuf;
+  noiseSrc.loop = true;
+  const noiseFilter = audioCtx.createBiquadFilter();
+  noiseFilter.type = 'lowpass';
+  noiseFilter.frequency.value = 120;
+  noiseFilter.Q.value = 5;
+  const g3 = audioCtx.createGain();
+  g3.gain.value = 0.25;
+  noiseSrc.connect(noiseFilter);
+  noiseFilter.connect(g3);
+  g3.connect(engineMasterGain);
+  noiseSrc.start();
+
+  engineNodes = [
+    { osc: osc1, gain: g1, base: 28 },
+    { osc: osc2, gain: g2, base: 56 },
+    { src: noiseSrc, gain: g3, filter: noiseFilter }
+  ];
 }
 function updateEngineSound(speed) {
-  if (!engineOsc) return;
-  engineOsc.frequency.value = 55 + Math.abs(speed) * 200;
-  engineGain.gain.value = 0.04 + Math.abs(speed) * 0.08;
+  if (!engineNodes.length) return;
+  const s = Math.abs(speed);
+  // Rev up oscillators with speed
+  if (engineNodes[0].osc) engineNodes[0].osc.frequency.value = 28 + s * 80;
+  if (engineNodes[1].osc) engineNodes[1].osc.frequency.value = 56 + s * 160;
+  // Open up exhaust filter with speed
+  if (engineNodes[2].filter) engineNodes[2].filter.frequency.value = 120 + s * 400;
+  // Overall volume
+  if (engineMasterGain) engineMasterGain.gain.value = 0.06 + s * 0.12;
 }
 function stopEngineSound() {
-  if (engineOsc) { try { engineOsc.stop(); } catch(e){} engineOsc = null; }
+  engineNodes.forEach(n => {
+    try { if (n.osc) n.osc.stop(); } catch(e){}
+    try { if (n.src) n.src.stop(); } catch(e){}
+  });
+  engineNodes = [];
 }
 
 // --- CROWD AMBIENT ---
