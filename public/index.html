@@ -2312,11 +2312,13 @@ function gameLoop(time) {
 
     if (t.flashTimer > 0) {
       t.flashTimer--;
-      t.mesh.children[0].material.emissive = new THREE.Color(0xffffff);
-      t.mesh.children[0].material.emissiveIntensity = t.flashTimer % 2 === 0 ? 0.8 : 0;
-    } else {
-      t.mesh.children[0].material.emissive = new THREE.Color(0x000000);
-      t.mesh.children[0].material.emissiveIntensity = 0;
+      const flashOn = t.flashTimer % 2 === 0;
+      t.mesh.traverse(child => {
+        if (child.isMesh && child.material && child.material.emissive) {
+          child.material.emissive.set(flashOn ? 0xffffff : 0x000000);
+          child.material.emissiveIntensity = flashOn ? 0.8 : 0;
+        }
+      });
     }
 
     if (Math.abs(t.speed) > 0.2 && t.onGround && Math.random() < 0.15) {
