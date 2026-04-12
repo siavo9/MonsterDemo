@@ -391,20 +391,26 @@ function playSound(type) {
   gain.connect(audioCtx.destination);
 
   if (type === 'crash') {
-    // Softer metallic thud instead of harsh noise burst
-    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.25, audioCtx.sampleRate);
+    // Deep crunchy impact sound
+    const duration = 0.4;
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < data.length; i++) {
       const t2 = i / audioCtx.sampleRate;
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-t2 * 20) * 0.4
-              + Math.sin(t2 * 120 * Math.PI * 2) * Math.exp(-t2 * 15) * 0.3;
+      // Heavy low-freq impact thump
+      const thump = Math.sin(t2 * 60 * Math.PI * 2) * Math.exp(-t2 * 12);
+      // Crunchy metal noise layer
+      const crunch = (Math.random() * 2 - 1) * Math.exp(-t2 * 8) * 0.6;
+      // Sub bass hit
+      const sub = Math.sin(t2 * 30 * Math.PI * 2) * Math.exp(-t2 * 10) * 0.5;
+      data[i] = (thump + crunch + sub) * 0.5;
     }
     const src = audioCtx.createBufferSource();
     src.buffer = buf;
     const filter = audioCtx.createBiquadFilter();
-    filter.type = 'lowpass'; filter.frequency.value = 800;
-    gain.gain.setValueAtTime(0.15, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+    filter.type = 'lowpass'; filter.frequency.value = 500;
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
     src.connect(filter); filter.connect(gain); src.start(now);
   } else if (type === 'boost') {
     const osc = audioCtx.createOscillator();
@@ -1974,15 +1980,15 @@ function wallCollision(t) {
   const dx = t.mesh.position.x;
   const dz = t.mesh.position.z;
   const dist = Math.sqrt(dx * dx + dz * dz);
-  const wallLimit = ARENA_RADIUS - 4;
+  const wallLimit = ARENA_RADIUS - 6;
   if (dist > wallLimit) {
     // Wall normal (pointing inward)
     const nx = -dx / dist;
     const nz = -dz / dist;
 
-    // Push car back inside with margin
-    t.mesh.position.x = (dx / dist) * wallLimit;
-    t.mesh.position.z = (dz / dist) * wallLimit;
+    // Push car well inside the wall
+    t.mesh.position.x = (dx / dist) * (wallLimit - 3);
+    t.mesh.position.z = (dz / dist) * (wallLimit - 3);
 
     // Car's movement direction
     const moveX = Math.sin(t.rotationY);
@@ -1997,9 +2003,9 @@ function wallCollision(t) {
     t.rotationY = Math.atan2(reflectX, reflectZ);
     t.mesh.rotation.y = t.rotationY;
 
-    // Reduce speed on bounce
+    // Bounce back with some speed
     const prevSpeed = Math.abs(t.speed);
-    t.speed *= 0.5;
+    t.speed = Math.max(prevSpeed * 0.4, 0.15);
 
     // Wall damage based on impact speed
     t.health -= prevSpeed * 6;
