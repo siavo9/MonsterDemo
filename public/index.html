@@ -2329,7 +2329,7 @@ function gameLoop(time) {
 
     if (t.flashTimer > 0) {
       t.flashTimer--;
-      const flashOn = t.flashTimer % 2 === 0;
+      const flashOn = t.flashTimer > 0 && t.flashTimer % 2 === 0;
       t.mesh.traverse(child => {
         if (child.isMesh && child.material && child.material.emissive) {
           child.material.emissive.set(flashOn ? 0xffffff : 0x000000);
