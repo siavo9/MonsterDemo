@@ -223,6 +223,7 @@ canvas { display: block; }
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
 // ============================================================
 // ZAK'S DEMOLITION DERBY
@@ -242,21 +243,101 @@ const TRUCK_COLOR_NAMES = [
   'Purple', 'Pink', 'Cyan', 'Amber'
 ];
 
-// Cars 2 mode characters
+const GROUND_Y = 1.5;
+
+// Cars 3 mode characters (GLB models)
 const CARS2_CHARACTERS = [
-  { name: 'Mrs. Fritter', color: '#d4a017', type: 'bus' },
-  { name: 'Dr. Damage', color: '#cc3333', type: 'ambulance' },
-  { name: 'Arvy', color: '#7b8d6e', type: 'rv' },
-  { name: 'APB', color: '#1a3a5c', type: 'police' },
-  { name: 'Lightning McQueen', color: '#cc1100', type: 'racecar' },
-  { name: 'Cruz Ramirez', color: '#f5c518', type: 'racecar2' }
+  { name: 'Lightning McQueen', color: '#cc1100', glb: 'mcqueen.glb' },
+  { name: 'Chick Hicks', color: '#86b828', glb: 'chick.glb' },
+  { name: 'The King', color: '#2a6dd4', glb: 'king.glb' },
+  { name: 'Mater', color: '#8B6914', glb: 'mater.glb' },
+  { name: 'Cruz Ramirez', color: '#f5c518', glb: 'cruz.glb' },
+  { name: 'Francesco', color: '#cc1100', glb: 'francesco.glb' },
+  { name: 'Cal Weathers', color: '#4a90d9', glb: 'cal.glb' },
+  { name: 'Miss Fritter', color: '#d4a017', glb: 'miss_fritter.glb' }
 ];
+
+// Cache for loaded GLB models
+const glbModelCache = {};
+const glbLoader = new THREE.GLTFLoader();
+
+function preloadAllGLBModels() {
+  return Promise.all(CARS2_CHARACTERS.map(c => {
+    return new Promise((resolve, reject) => {
+      if (glbModelCache[c.glb]) { resolve(); return; }
+      glbLoader.load('/' + c.glb, (gltf) => {
+        glbModelCache[c.glb] = gltf.scene;
+        resolve();
+      }, undefined, (err) => {
+        console.error('Failed to load ' + c.glb, err);
+        resolve(); // continue even if one fails
+      });
+    });
+  }));
+}
+
+function createGLBCar(charIndex, index) {
+  const char = CARS2_CHARACTERS[charIndex];
+  const template = glbModelCache[char.glb];
+  if (!template) {
+    // Fallback to a simple box if model failed to load
+    const group = new THREE.Group();
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(3, 1.5, 5),
+      new THREE.MeshStandardMaterial({ color: char.color })
+    );
+    box.position.y = 1.5;
+    group.add(box);
+    return { mesh: group, wheels: [], color: char.color, charName: char.name, index };
+  }
+
+  const model = template.clone();
+
+  // Compute bounding box to auto-scale
+  const bbox = new THREE.Box3().setFromObject(model);
+  const size = new THREE.Vector3();
+  bbox.getSize(size);
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const targetSize = 5.0; // target ~5 units long
+  const scaleFactor = targetSize / maxDim;
+  model.scale.multiplyScalar(scaleFactor);
+
+  // Recompute bbox after scale to center and ground the model
+  const bbox2 = new THREE.Box3().setFromObject(model);
+  const center = new THREE.Vector3();
+  bbox2.getCenter(center);
+  const minY = bbox2.min.y;
+  model.position.set(-center.x, -minY + 0.1, -center.z);
+
+  // Wrap in a group so position/rotation works like existing trucks
+  const group = new THREE.Group();
+  group.add(model);
+  group.position.y = GROUND_Y;
+
+  // Enable shadows on all meshes
+  const wheels = [];
+  model.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+      // Deep clone materials so each car instance is independent
+      if (child.material) {
+        child.material = child.material.clone ? child.material.clone() : child.material;
+      }
+    }
+    // Try to find wheel parts by name for spinning
+    if (child.name && child.name.toLowerCase().includes('wheel')) {
+      wheels.push(child);
+    }
+  });
+
+  return { mesh: group, wheels, color: char.color, charName: char.name, index };
+}
 
 const MAX_HEALTH = 100;
 const BOOST_FORCE = 2.5;
 const JUMP_FORCE = 0.35;
 const GRAVITY = -0.015;
-const GROUND_Y = 1.5;
 const MAX_SPEED = 0.8;
 const ACCELERATION = 0.018;
 const BRAKE_FORCE = 0.025;
@@ -504,14 +585,16 @@ function buildColorPicker() {
     });
     if (playerIndex >= TRUCK_COLORS.length) playerIndex = 0;
   } else {
-    pickLabel.textContent = 'Pick Your Car';
+    pickLabel.textContent = 'Pick Your Character';
     CARS2_CHARACTERS.forEach((c, i) => {
       const swatch = document.createElement('div');
       swatch.className = 'color-swatch' + (i === playerIndex ? ' selected' : '');
       swatch.style.background = c.color;
       swatch.title = c.name;
       swatch.textContent = c.name;
-      swatch.style.width = '70px';
+      swatch.style.width = '80px';
+      swatch.style.height = '55px';
+      swatch.style.fontSize = '0.5rem';
       swatch.onclick = () => {
         document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
         swatch.classList.add('selected');
@@ -1730,7 +1813,7 @@ function createTruck(colorOrChar, index) {
 function placeTrucks() {
   trucks = [];
   eliminationOrder = [];
-  const count = gameMode === 'monster' ? 8 : 6;
+  const count = gameMode === 'monster' ? 8 : CARS2_CHARACTERS.length;
 
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * Math.PI * 2;
@@ -1759,13 +1842,36 @@ function placeTrucks() {
         smokeParticles: []
       };
     } else {
-      t = createTruck(null, i);
+      // Cars 3 mode — use GLB models
+      const charIndex = i % CARS2_CHARACTERS.length;
+      const raw = createGLBCar(charIndex, i);
+      t = {
+        ...raw,
+        health: MAX_HEALTH,
+        speed: 0,
+        rotationY: 0,
+        vy: 0,
+        onGround: true,
+        alive: true,
+        boosts: 3,
+        boosting: false,
+        boostTimer: 0,
+        jumpCooldown: 0,
+        aiTimer: 0,
+        aiTargetAngle: 0,
+        aiAccel: false,
+        aiTarget: null,
+        flashTimer: 0,
+        smokeParticles: []
+      };
     }
 
     t.mesh.position.x = Math.cos(angle) * dist;
     t.mesh.position.z = Math.sin(angle) * dist;
     t.rotationY = angle + Math.PI;
     t.mesh.rotation.y = t.rotationY;
+    // Monster truck builders already add to scene; GLB cars need explicit add
+    if (gameMode === 'cars2') scene.add(t.mesh);
     trucks.push(t);
   }
   boostsLeft = 3;
@@ -2270,7 +2376,7 @@ function gameLoop(time) {
 // ============================================================
 // START / END
 // ============================================================
-function startGame() {
+async function startGame() {
   initAudio();
 
   if (scene) {
@@ -2286,6 +2392,16 @@ function startGame() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.appendChild(renderer.domElement);
+  }
+
+  // Preload GLB models for Cars 3 mode
+  if (gameMode === 'cars2') {
+    const startBtn = document.getElementById('startBtn');
+    startBtn.textContent = 'LOADING MODELS...';
+    startBtn.style.pointerEvents = 'none';
+    await preloadAllGLBModels();
+    startBtn.textContent = 'START';
+    startBtn.style.pointerEvents = '';
   }
 
   setupCamera();
