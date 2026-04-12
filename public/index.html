@@ -1975,15 +1975,38 @@ function wallCollision(t) {
   const dx = t.mesh.position.x;
   const dz = t.mesh.position.z;
   const dist = Math.sqrt(dx * dx + dz * dz);
-  if (dist > ARENA_RADIUS - 2) {
-    const nx = dx / dist;
-    const nz = dz / dist;
-    t.mesh.position.x = nx * (ARENA_RADIUS - 2);
-    t.mesh.position.z = nz * (ARENA_RADIUS - 2);
-    t.speed *= -0.4;
-    t.health -= Math.abs(t.speed) * 8;
+  const wallLimit = ARENA_RADIUS - 4;
+  if (dist > wallLimit) {
+    // Wall normal (pointing inward)
+    const nx = -dx / dist;
+    const nz = -dz / dist;
+
+    // Push car back inside with margin
+    t.mesh.position.x = (dx / dist) * wallLimit;
+    t.mesh.position.z = (dz / dist) * wallLimit;
+
+    // Car's movement direction
+    const moveX = Math.sin(t.rotationY);
+    const moveZ = Math.cos(t.rotationY);
+
+    // Reflect direction off wall normal
+    const dot = moveX * nx + moveZ * nz;
+    const reflectX = moveX - 2 * dot * nx;
+    const reflectZ = moveZ - 2 * dot * nz;
+
+    // Set new rotation to reflected angle
+    t.rotationY = Math.atan2(reflectX, reflectZ);
+    t.mesh.rotation.y = t.rotationY;
+
+    // Reduce speed on bounce
+    const prevSpeed = Math.abs(t.speed);
+    t.speed *= 0.5;
+
+    // Wall damage based on impact speed
+    t.health -= prevSpeed * 6;
     t.health = Math.max(0, t.health);
-    if (Math.abs(t.speed) > 0.1) playSound('crash');
+    t.flashTimer = 4;
+    if (prevSpeed > 0.1) playSound('crash');
   }
 }
 
