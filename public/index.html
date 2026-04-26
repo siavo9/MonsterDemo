@@ -2743,13 +2743,16 @@ function gameLoop(time) {
 
     if (t.flashTimer > 0) {
       t.flashTimer--;
-      const flashOn = t.flashTimer > 0 && t.flashTimer % 2 === 0;
-      t.mesh.traverse(child => {
-        if (child.isMesh && child.material && child.material.emissive) {
-          child.material.emissive.set(flashOn ? 0xffffff : 0x000000);
-          child.material.emissiveIntensity = flashOn ? 0.8 : 0;
-        }
-      });
+      // Only flash on monster trucks — GLB models look bad with emissive override
+      if (gameMode === 'monster') {
+        const flashOn = t.flashTimer > 0 && t.flashTimer % 2 === 0;
+        t.mesh.traverse(child => {
+          if (child.isMesh && child.material && child.material.emissive) {
+            child.material.emissive.set(flashOn ? 0xffffff : 0x000000);
+            child.material.emissiveIntensity = flashOn ? 0.8 : 0;
+          }
+        });
+      }
     }
 
     if (Math.abs(t.speed) > 0.2 && t.onGround && Math.random() < 0.15) {
