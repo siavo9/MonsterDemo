@@ -915,267 +915,338 @@ function buildScene() {
 // ============================================================
 // BUILD THUNDER HOLLOW SCENE (Cars 3 Mode)
 // ============================================================
+// Figure-8 geometry constants for Cars 3 Crazy 8 mode
+const FIG8_LOOP_RADIUS = 45; // radius of each loop
+const FIG8_LOOP_OFFSET = 38; // distance from center to each loop center (overlap creates the 8)
+const FIG8_WALL_HEIGHT = 3; // low walls so you can see everything
+
+// Test if a point is inside the figure-8 shape
+function isInsideFigure8(x, z) {
+  const d1 = Math.sqrt(x * x + (z - FIG8_LOOP_OFFSET) * (z - FIG8_LOOP_OFFSET));
+  const d2 = Math.sqrt(x * x + (z + FIG8_LOOP_OFFSET) * (z + FIG8_LOOP_OFFSET));
+  return d1 < FIG8_LOOP_RADIUS || d2 < FIG8_LOOP_RADIUS;
+}
+
+// Get distance to nearest figure-8 boundary and the outward normal
+function figure8Boundary(x, z) {
+  const d1 = Math.sqrt(x * x + (z - FIG8_LOOP_OFFSET) * (z - FIG8_LOOP_OFFSET));
+  const d2 = Math.sqrt(x * x + (z + FIG8_LOOP_OFFSET) * (z + FIG8_LOOP_OFFSET));
+
+  // Find which loop center is closest
+  let cx = 0, cz, dist, loopR = FIG8_LOOP_RADIUS;
+  if (d1 < d2) {
+    cz = FIG8_LOOP_OFFSET; dist = d1;
+  } else {
+    cz = -FIG8_LOOP_OFFSET; dist = d2;
+  }
+
+  // Normal pointing outward from nearest loop center
+  const nx = (dist > 0.01) ? (x - cx) / dist : 0;
+  const nz = (dist > 0.01) ? (z - cz) / dist : 1;
+
+  return { dist, loopR, nx, nz, cx, cz };
+}
+
+// Random point inside the figure-8
+function randomFig8Point(margin) {
+  let x, z;
+  for (let attempts = 0; attempts < 100; attempts++) {
+    // Pick a random loop
+    const loop = Math.random() < 0.5 ? 1 : -1;
+    const ang = Math.random() * Math.PI * 2;
+    const r = Math.random() * (FIG8_LOOP_RADIUS - margin);
+    x = Math.cos(ang) * r;
+    z = Math.sin(ang) * r + loop * FIG8_LOOP_OFFSET;
+    if (isInsideFigure8(x, z)) return { x, z };
+  }
+  return { x: 0, z: 0 };
+}
+
 function buildThunderHollowScene() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x080810);
-  scene.fog = new THREE.Fog(0x080810, 100, 220);
+  scene.fog = new THREE.Fog(0x080810, 150, 280);
 
   // --- LIGHTING: warm county-fair night ---
-  const ambient = new THREE.AmbientLight(0xffeedd, 0.25);
+  const ambient = new THREE.AmbientLight(0xffeedd, 0.3);
   scene.add(ambient);
   const dirLight = new THREE.DirectionalLight(0xffe4b5, 0.5);
-  dirLight.position.set(20, 40, 15);
+  dirLight.position.set(20, 50, 15);
   dirLight.castShadow = true;
   scene.add(dirLight);
 
-  // Warm amber/yellow floodlights
-  const spotColors = [0xffaa33, 0xf7c948, 0xff9933, 0xf5b041];
-  for (let i = 0; i < 4; i++) {
-    const angle = (i / 4) * Math.PI * 2;
-    const spot = new THREE.SpotLight(spotColors[i], 0.7, 220, 0.5, 0.5);
-    spot.position.set(Math.cos(angle) * 70, 35, Math.sin(angle) * 70);
-    spot.target.position.set(0, 0, 0);
+  // Floodlights around the figure-8
+  const spotColors = [0xffaa33, 0xf7c948, 0xff9933, 0xf5b041, 0xffaa33, 0xf7c948];
+  const lightPositions = [
+    { x: -55, z: FIG8_LOOP_OFFSET },
+    { x: 55, z: FIG8_LOOP_OFFSET },
+    { x: -55, z: -FIG8_LOOP_OFFSET },
+    { x: 55, z: -FIG8_LOOP_OFFSET },
+    { x: 0, z: FIG8_LOOP_OFFSET + 55 },
+    { x: 0, z: -(FIG8_LOOP_OFFSET + 55) }
+  ];
+  lightPositions.forEach((lp, i) => {
+    const spot = new THREE.SpotLight(spotColors[i], 0.6, 250, 0.6, 0.5);
+    spot.position.set(lp.x, 35, lp.z);
+    spot.target.position.set(0, 0, lp.z > 0 ? FIG8_LOOP_OFFSET : -FIG8_LOOP_OFFSET);
     scene.add(spot);
     scene.add(spot.target);
 
-    // Rusty wooden poles
     const poleGeo = new THREE.CylinderGeometry(0.4, 0.6, 35, 6);
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 0.9 });
     const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.set(Math.cos(angle) * 72, 17.5, Math.sin(angle) * 72);
+    pole.position.set(lp.x, 17.5, lp.z);
     scene.add(pole);
 
-    // Light fixture boxes with warm glow
     const fixGeo = new THREE.BoxGeometry(4, 1.5, 4);
     const fixMat = new THREE.MeshStandardMaterial({ color: spotColors[i], emissive: spotColors[i], emissiveIntensity: 0.9 });
     const fix = new THREE.Mesh(fixGeo, fixMat);
-    fix.position.set(Math.cos(angle) * 70, 35, Math.sin(angle) * 70);
+    fix.position.set(lp.x, 35, lp.z);
     scene.add(fix);
-  }
+  });
 
-  // --- GROUND: muddy dirt arena ---
-  const groundGeo = new THREE.CircleGeometry(ARENA_RADIUS, 64);
+  // --- GROUND: figure-8 shaped dirt ---
+  // Two overlapping circle grounds
   const groundMat = new THREE.MeshStandardMaterial({ color: 0x6b4e1f, roughness: 1.0 });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = 0;
-  scene.add(ground);
+  [FIG8_LOOP_OFFSET, -FIG8_LOOP_OFFSET].forEach(zOff => {
+    const groundGeo = new THREE.CircleGeometry(FIG8_LOOP_RADIUS, 64);
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(0, 0, zOff);
+    scene.add(ground);
+  });
 
-  // Mud puddles (darker wet patches)
-  for (let i = 0; i < 18; i++) {
+  // Mud puddles
+  for (let i = 0; i < 25; i++) {
     const size = 3 + Math.random() * 8;
     const puddleGeo = new THREE.CircleGeometry(size, 16);
     const puddleMat = new THREE.MeshStandardMaterial({ color: 0x3d2b10, roughness: 0.4, metalness: 0.2 });
     const puddle = new THREE.Mesh(puddleGeo, puddleMat);
     puddle.rotation.x = -Math.PI / 2;
-    const dist = Math.random() * (ARENA_RADIUS - 15);
-    const ang = Math.random() * Math.PI * 2;
-    puddle.position.set(Math.cos(ang) * dist, 0.02, Math.sin(ang) * dist);
+    const pt = randomFig8Point(15);
+    puddle.position.set(pt.x, 0.02, pt.z);
     scene.add(puddle);
   }
 
-  // Tire track ruts in dirt
-  for (let i = 0; i < 40; i++) {
+  // Tire track ruts
+  for (let i = 0; i < 50; i++) {
     const len = 6 + Math.random() * 25;
     const lineGeo = new THREE.PlaneGeometry(len, 0.4 + Math.random() * 0.6);
     const lineMat = new THREE.MeshStandardMaterial({ color: 0x4a3515, roughness: 1 });
     const line = new THREE.Mesh(lineGeo, lineMat);
     line.rotation.x = -Math.PI / 2;
     line.rotation.z = Math.random() * Math.PI;
-    const dist = Math.random() * (ARENA_RADIUS - 10);
-    const ang = Math.random() * Math.PI * 2;
-    line.position.set(Math.cos(ang) * dist, 0.01, Math.sin(ang) * dist);
+    const pt = randomFig8Point(10);
+    line.position.set(pt.x, 0.01, pt.z);
     scene.add(line);
   }
 
-  // --- FIGURE-8 CROSSOVER RAMP (center) ---
+  // --- FIGURE-8 CROSSOVER RAMP (center where loops meet) ---
   const crossGroup = new THREE.Group();
   const crossMat = new THREE.MeshStandardMaterial({ color: 0x6b4e1f, roughness: 0.8 });
-  // Raised crossing bridge
-  const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(10, 0.4, 18), crossMat);
+  const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(12, 0.4, 20), crossMat);
   bridgeDeck.position.set(0, 2.5, 0);
   crossGroup.add(bridgeDeck);
-  // Support pillars under bridge
   const pillarMat = new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 0.9 });
-  [[-3, -6], [-3, 6], [3, -6], [3, 6]].forEach(([px, pz]) => {
+  [[-4, -7], [-4, 7], [4, -7], [4, 7]].forEach(([px, pz]) => {
     const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2.5, 6), pillarMat);
     pillar.position.set(px, 1.25, pz);
     crossGroup.add(pillar);
   });
-  // Approach ramps for the bridge
   const rampUpMat = new THREE.MeshStandardMaterial({ color: 0x7a5c2a, roughness: 0.7, side: THREE.DoubleSide });
-  [[-1, -14], [1, 14]].forEach(([dir, zOff]) => {
-    const rampGeo = new THREE.BoxGeometry(10, 0.3, 8);
+  [[-1, -16], [1, 16]].forEach(([dir, zOff]) => {
+    const rampGeo = new THREE.BoxGeometry(12, 0.3, 10);
     const ramp = new THREE.Mesh(rampGeo, rampUpMat);
     ramp.position.set(0, 1.25, zOff * 0.5);
-    ramp.rotation.x = dir * 0.3;
+    ramp.rotation.x = dir * 0.25;
     crossGroup.add(ramp);
   });
   scene.add(crossGroup);
-  ramps.push({ mesh: crossGroup, x: 0, z: 0, halfW: 5, halfD: 14, ry: 0 });
+  ramps.push({ mesh: crossGroup, x: 0, z: 0, halfW: 6, halfD: 16, ry: 0 });
 
-  // --- WALLS: wooden fence with tire stacks ---
-  const wallSegments = 48;
-  for (let i = 0; i < wallSegments; i++) {
-    const angle = (i / wallSegments) * Math.PI * 2;
-    const nextAngle = ((i + 1) / wallSegments) * Math.PI * 2;
-    const midAngle = (angle + nextAngle) / 2;
+  // --- WALLS: low wooden fence following figure-8 outline ---
+  const wallSegs = 80;
+  const wallMats = [
+    new THREE.MeshStandardMaterial({ color: 0x6b4226, roughness: 0.9 }),
+    new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.9 }),
+    new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 0.9 })
+  ];
+  // Build walls around each loop, but skip segments in the overlap zone
+  [FIG8_LOOP_OFFSET, -FIG8_LOOP_OFFSET].forEach(zCenter => {
+    for (let i = 0; i < wallSegs; i++) {
+      const angle = (i / wallSegs) * Math.PI * 2;
+      const nextAngle = ((i + 1) / wallSegs) * Math.PI * 2;
+      const midAngle = (angle + nextAngle) / 2;
+      const wx = Math.cos(midAngle) * FIG8_LOOP_RADIUS;
+      const wz = Math.sin(midAngle) * FIG8_LOOP_RADIUS + zCenter;
 
-    // Wooden fence planks
-    const wallGeo = new THREE.BoxGeometry(
-      2 * ARENA_RADIUS * Math.sin(Math.PI / wallSegments), WALL_HEIGHT, 1.5
-    );
-    const woodColor = i % 3 === 0 ? 0x6b4226 : i % 3 === 1 ? 0x7a5230 : 0x5c3a1e;
-    const wallMat = new THREE.MeshStandardMaterial({ color: woodColor, roughness: 0.9 });
-    const wall = new THREE.Mesh(wallGeo, wallMat);
-    wall.position.set(
-      Math.cos(midAngle) * (ARENA_RADIUS + 0.5),
-      WALL_HEIGHT / 2,
-      Math.sin(midAngle) * (ARENA_RADIUS + 0.5)
-    );
-    wall.rotation.y = -midAngle + Math.PI / 2;
-    scene.add(wall);
+      // Skip wall segments that are inside the other loop (the overlap/crossing zone)
+      const otherZ = zCenter === FIG8_LOOP_OFFSET ? -FIG8_LOOP_OFFSET : FIG8_LOOP_OFFSET;
+      const dOther = Math.sqrt(wx * wx + (wz - otherZ) * (wz - otherZ));
+      if (dOther < FIG8_LOOP_RADIUS - 2) continue;
 
-    // Horizontal plank lines on fence
-    if (i % 2 === 0) {
-      for (let p = 0; p < 3; p++) {
-        const plankGeo = new THREE.BoxGeometry(
-          2 * ARENA_RADIUS * Math.sin(Math.PI / wallSegments) * 0.95, 0.15, 0.1
-        );
-        const plankMat = new THREE.MeshStandardMaterial({ color: 0x4a2e14, roughness: 1 });
-        const plank = new THREE.Mesh(plankGeo, plankMat);
-        plank.position.set(
-          Math.cos(midAngle) * (ARENA_RADIUS + 1.3),
-          2 + p * 2.5,
-          Math.sin(midAngle) * (ARENA_RADIUS + 1.3)
-        );
-        plank.rotation.y = -midAngle + Math.PI / 2;
-        scene.add(plank);
+      const segLen = 2 * FIG8_LOOP_RADIUS * Math.sin(Math.PI / wallSegs);
+      const wallGeo = new THREE.BoxGeometry(segLen, FIG8_WALL_HEIGHT, 1.5);
+      const wall = new THREE.Mesh(wallGeo, wallMats[i % 3]);
+      wall.position.set(wx, FIG8_WALL_HEIGHT / 2, wz);
+      wall.rotation.y = -midAngle + Math.PI / 2;
+      scene.add(wall);
+    }
+  });
+
+  // Tire stacks along the fence
+  for (let loop = 0; loop < 2; loop++) {
+    const zCenter = loop === 0 ? FIG8_LOOP_OFFSET : -FIG8_LOOP_OFFSET;
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const tx = Math.cos(angle) * (FIG8_LOOP_RADIUS - 2);
+      const tz = Math.sin(angle) * (FIG8_LOOP_RADIUS - 2) + zCenter;
+      // Skip if in overlap
+      const otherZ = loop === 0 ? -FIG8_LOOP_OFFSET : FIG8_LOOP_OFFSET;
+      if (Math.sqrt(tx * tx + (tz - otherZ) * (tz - otherZ)) < FIG8_LOOP_RADIUS - 2) continue;
+
+      const stackGroup = new THREE.Group();
+      const tireStackMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.95 });
+      for (let t = 0; t < 3; t++) {
+        const tire = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.5, 8, 12), tireStackMat);
+        tire.rotation.x = Math.PI / 2;
+        tire.position.y = t * 1.0;
+        stackGroup.add(tire);
       }
+      stackGroup.position.set(tx, 0.5, tz);
+      scene.add(stackGroup);
     }
   }
 
-  // Tire stacks along the fence (every ~30 degrees)
-  for (let i = 0; i < 12; i++) {
-    const angle = (i / 12) * Math.PI * 2;
-    const stackGroup = new THREE.Group();
-    const tireStackMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.95 });
-    for (let t = 0; t < 3; t++) {
-      const tire = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.5, 8, 12), tireStackMat);
-      tire.rotation.x = Math.PI / 2;
-      tire.position.y = t * 1.0;
-      stackGroup.add(tire);
-    }
-    stackGroup.position.set(
-      Math.cos(angle) * (ARENA_RADIUS - 2),
-      0.5,
-      Math.sin(angle) * (ARENA_RADIUS - 2)
-    );
-    scene.add(stackGroup);
-  }
+  // --- STANDS: bleachers around the figure-8 ---
+  // Use elongated elliptical stands
+  for (let tier = 0; tier < 2; tier++) {
+    const offset = FIG8_LOOP_RADIUS + 6 + tier * 8;
+    const h = FIG8_WALL_HEIGHT + 2 + tier * 4;
+    [FIG8_LOOP_OFFSET, -FIG8_LOOP_OFFSET].forEach(zCenter => {
+      const standGeo = new THREE.TorusGeometry(offset, 2.5, 4, 48);
+      const woodColors = [0x7a5230, 0x6b4226];
+      const standMat = new THREE.MeshStandardMaterial({ color: woodColors[tier], roughness: 0.9 });
+      const stand = new THREE.Mesh(standGeo, standMat);
+      stand.rotation.x = Math.PI / 2;
+      stand.position.set(0, h, zCenter);
+      scene.add(stand);
 
-  // --- STANDS: rickety wooden bleachers ---
-  for (let tier = 0; tier < 3; tier++) {
-    const r = ARENA_RADIUS + 5 + tier * 8;
-    const h = WALL_HEIGHT + tier * 4;
-    const standGeo = new THREE.TorusGeometry(r, 2.5, 4, 48);
-    const woodColors = [0x7a5230, 0x6b4226, 0x5c3a1e];
-    const standMat = new THREE.MeshStandardMaterial({ color: woodColors[tier], roughness: 0.9 });
-    const stand = new THREE.Mesh(standGeo, standMat);
-    stand.rotation.x = Math.PI / 2;
-    stand.position.y = h;
-    scene.add(stand);
-
-    // Wooden support beams under stands
-    if (tier > 0) {
-      for (let b = 0; b < 24; b++) {
-        const bAngle = (b / 24) * Math.PI * 2;
-        const beam = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.2, 0.25, h, 4),
-          new THREE.MeshStandardMaterial({ color: 0x4a2e14, roughness: 1 })
+      // Fans
+      const fanCount = 60 + tier * 30;
+      for (let f = 0; f < fanCount; f++) {
+        const ang = (f / fanCount) * Math.PI * 2;
+        const fanGeo = new THREE.SphereGeometry(0.4, 4, 4);
+        const fanColor = [0xcc3333, 0x3366aa, 0xeeeeee, 0x8B6914, 0xff6633, 0xdddddd, 0x996633][Math.floor(Math.random() * 7)];
+        const fanMat = new THREE.MeshStandardMaterial({ color: fanColor });
+        const fan = new THREE.Mesh(fanGeo, fanMat);
+        fan.position.set(
+          Math.cos(ang) * (offset + (Math.random() - 0.5) * 3),
+          h + 1.5 + Math.random() * 2,
+          Math.sin(ang) * (offset + (Math.random() - 0.5) * 3) + zCenter
         );
-        beam.position.set(Math.cos(bAngle) * r, h / 2, Math.sin(bAngle) * r);
-        scene.add(beam);
+        fan.userData.baseY = fan.position.y;
+        fan.userData.bobSpeed = 2 + Math.random() * 3;
+        fan.userData.bobAmp = 0.2 + Math.random() * 0.3;
+        scene.add(fan);
+        obstacles.push({ mesh: fan, type: 'fan' });
       }
-    }
-
-    // Fans/spectators
-    const fanCount = 80 + tier * 40;
-    for (let f = 0; f < fanCount; f++) {
-      const ang = (f / fanCount) * Math.PI * 2;
-      const fanGeo = new THREE.SphereGeometry(0.4, 4, 4);
-      // Country/rustic fan colors — flannel reds, blues, whites, browns
-      const fanColor = [0xcc3333, 0x3366aa, 0xeeeeee, 0x8B6914, 0xff6633, 0xdddddd, 0x996633][Math.floor(Math.random() * 7)];
-      const fanMat = new THREE.MeshStandardMaterial({ color: fanColor });
-      const fan = new THREE.Mesh(fanGeo, fanMat);
-      fan.position.set(
-        Math.cos(ang) * (r + (Math.random() - 0.5) * 4),
-        h + 1.5 + Math.random() * 2,
-        Math.sin(ang) * (r + (Math.random() - 0.5) * 4)
-      );
-      fan.userData.baseY = fan.position.y;
-      fan.userData.bobSpeed = 2 + Math.random() * 3;
-      fan.userData.bobAmp = 0.2 + Math.random() * 0.3;
-      scene.add(fan);
-      obstacles.push({ mesh: fan, type: 'fan' });
-    }
+    });
   }
 
-  // --- THUNDER HOLLOW SIGN (neon-style) ---
+  // --- CRAZY 8 SIGN ---
   const signGeo = new THREE.BoxGeometry(48, 10, 1);
   const signMat = new THREE.MeshStandardMaterial({ color: 0x1a0a05 });
   const sign = new THREE.Mesh(signGeo, signMat);
-  sign.position.set(0, 30, -(ARENA_RADIUS + 25));
+  sign.position.set(0, 25, -(FIG8_LOOP_OFFSET + FIG8_LOOP_RADIUS + 15));
   scene.add(sign);
 
-  // Neon border glow
   const signBorderGeo = new THREE.BoxGeometry(50, 11, 0.5);
   const signBorderMat = new THREE.MeshStandardMaterial({ color: 0xff6622, emissive: 0xff6622, emissiveIntensity: 0.7 });
   const signBorder = new THREE.Mesh(signBorderGeo, signBorderMat);
-  signBorder.position.set(0, 30, -(ARENA_RADIUS + 25.3));
+  signBorder.position.set(0, 25, -(FIG8_LOOP_OFFSET + FIG8_LOOP_RADIUS + 15.3));
   scene.add(signBorder);
 
-  // "THUNDER HOLLOW" text lights (row of glowing boxes)
   const letterColors = [0xff4400, 0xff6600, 0xff8800, 0xffaa00];
-  for (let i = 0; i < 14; i++) {
-    const letterGeo = new THREE.BoxGeometry(2.5, 4, 0.3);
+  for (let i = 0; i < 7; i++) {
+    const letterGeo = new THREE.BoxGeometry(4, 5, 0.3);
     const lc = letterColors[i % letterColors.length];
     const letterMat = new THREE.MeshStandardMaterial({ color: lc, emissive: lc, emissiveIntensity: 0.6 });
     const letter = new THREE.Mesh(letterGeo, letterMat);
-    letter.position.set(-17 + i * 2.6, 30, -(ARENA_RADIUS + 24.5));
+    letter.position.set(-13 + i * 4.5, 25, -(FIG8_LOOP_OFFSET + FIG8_LOOP_RADIUS + 14.5));
     scene.add(letter);
   }
 
-  // Small neon accent signs around arena
-  for (let i = 0; i < 4; i++) {
-    const nAngle = (i / 4) * Math.PI * 2 + 0.4;
+  // Neon accent signs
+  for (let i = 0; i < 6; i++) {
+    const nAngle = (i / 6) * Math.PI * 2;
     const neonGeo = new THREE.BoxGeometry(6, 3, 0.3);
-    const neonColor = [0xff4400, 0x00ff44, 0xffaa00, 0xff2266][i];
+    const neonColor = [0xff4400, 0x00ff44, 0xffaa00, 0xff2266, 0xff6600, 0x44aaff][i];
     const neonMat = new THREE.MeshStandardMaterial({ color: neonColor, emissive: neonColor, emissiveIntensity: 0.5 });
     const neon = new THREE.Mesh(neonGeo, neonMat);
-    neon.position.set(
-      Math.cos(nAngle) * (ARENA_RADIUS + 12),
-      15,
-      Math.sin(nAngle) * (ARENA_RADIUS + 12)
-    );
-    neon.rotation.y = -nAngle + Math.PI / 2;
+    // Place around the overall shape
+    const nz = Math.sin(nAngle) * (FIG8_LOOP_OFFSET + FIG8_LOOP_RADIUS + 10);
+    const nx = Math.cos(nAngle) * (FIG8_LOOP_RADIUS + 10);
+    neon.position.set(nx, 12, nz);
+    neon.lookAt(0, 12, 0);
     scene.add(neon);
   }
 
-  // --- STARS in the sky ---
+  // --- FIRE EFFECTS (like the movie!) ---
+  const fireMat = new THREE.MeshStandardMaterial({ color: 0xff6600, emissive: 0xff4400, emissiveIntensity: 1.0, transparent: true, opacity: 0.8 });
+  const firePositions = [];
+  // Ring of fire pits around the crossing
+  for (let i = 0; i < 8; i++) {
+    const ang = (i / 8) * Math.PI * 2;
+    const fr = 18;
+    firePositions.push({ x: Math.cos(ang) * fr, z: Math.sin(ang) * fr });
+  }
+  // Extra fires near each loop
+  for (let loop = -1; loop <= 1; loop += 2) {
+    for (let i = 0; i < 4; i++) {
+      const ang = (i / 4) * Math.PI * 2;
+      firePositions.push({ x: Math.cos(ang) * 25, z: Math.sin(ang) * 25 + loop * FIG8_LOOP_OFFSET });
+    }
+  }
+  firePositions.forEach(fp => {
+    const fireGroup = new THREE.Group();
+    // Fire barrel base
+    const barrelGeo = new THREE.CylinderGeometry(1, 1.2, 2, 8);
+    const barrelMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
+    const barrel = new THREE.Mesh(barrelGeo, barrelMat);
+    fireGroup.add(barrel);
+    // Flame cones
+    for (let f = 0; f < 3; f++) {
+      const flameGeo = new THREE.ConeGeometry(0.6 + Math.random() * 0.4, 2 + Math.random() * 2, 6);
+      const flame = new THREE.Mesh(flameGeo, fireMat.clone());
+      flame.position.set((Math.random() - 0.5) * 0.5, 1.5 + Math.random(), (Math.random() - 0.5) * 0.5);
+      flame.userData.baseY = flame.position.y;
+      flame.userData.flickerSpeed = 3 + Math.random() * 5;
+      flame.userData.flickerAmp = 0.3 + Math.random() * 0.3;
+      fireGroup.add(flame);
+    }
+    // Point light for fire glow
+    const fireLight = new THREE.PointLight(0xff6600, 0.4, 20);
+    fireLight.position.y = 3;
+    fireGroup.add(fireLight);
+
+    fireGroup.position.set(fp.x, 0, fp.z);
+    scene.add(fireGroup);
+  });
+
+  // --- STARS ---
   for (let i = 0; i < 200; i++) {
     const starGeo = new THREE.SphereGeometry(0.15 + Math.random() * 0.2, 4, 4);
     const starMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.8 });
     const star = new THREE.Mesh(starGeo, starMat);
     const sAngle = Math.random() * Math.PI * 2;
     const sHeight = 60 + Math.random() * 80;
-    const sRadius = 80 + Math.random() * 100;
+    const sRadius = 100 + Math.random() * 100;
     star.position.set(Math.cos(sAngle) * sRadius, sHeight, Math.sin(sAngle) * sRadius);
     scene.add(star);
   }
 
-  // --- OBSTACLES: hay bales and tire stacks ---
-  // Hay bales (replace crates)
+  // --- OBSTACLES: hay bales and tire stacks inside figure-8 ---
   for (let i = 0; i < 15; i++) {
     const hayGroup = new THREE.Group();
     const hayW = 1.5 + Math.random() * 1.5;
@@ -1185,8 +1256,6 @@ function buildThunderHollowScene() {
     const hayMat = new THREE.MeshStandardMaterial({ color: 0xd4b843, roughness: 1 });
     const hay = new THREE.Mesh(hayGeo, hayMat);
     hayGroup.add(hay);
-
-    // Straw texture bands
     for (let b = 0; b < 2; b++) {
       const bandGeo = new THREE.BoxGeometry(hayW * 1.02, 0.08, hayD * 1.02);
       const bandMat = new THREE.MeshStandardMaterial({ color: 0x8B6914 });
@@ -1194,17 +1263,14 @@ function buildThunderHollowScene() {
       band.position.y = -hayH * 0.2 + b * hayH * 0.4;
       hayGroup.add(band);
     }
-
-    const dist = 10 + Math.random() * 55;
-    const ang = Math.random() * Math.PI * 2;
-    hayGroup.position.set(Math.cos(ang) * dist, hayH / 2, Math.sin(ang) * dist);
+    const pt = randomFig8Point(8);
+    hayGroup.position.set(pt.x, hayH / 2, pt.z);
     hayGroup.rotation.y = Math.random() * Math.PI;
     scene.add(hayGroup);
     obstacles.push({ mesh: hayGroup, type: 'crate', vx: 0, vz: 0, size: hayW, active: true });
   }
 
-  // Tire stack obstacles
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 10; i++) {
     const tireGroup = new THREE.Group();
     const tireMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.95 });
     const numTires = 2 + Math.floor(Math.random() * 2);
@@ -1214,41 +1280,18 @@ function buildThunderHollowScene() {
       tire.position.y = t * 0.7;
       tireGroup.add(tire);
     }
-    const dist = 8 + Math.random() * 60;
-    const ang = Math.random() * Math.PI * 2;
-    tireGroup.position.set(Math.cos(ang) * dist, 0.4, Math.sin(ang) * dist);
+    const pt = randomFig8Point(8);
+    tireGroup.position.set(pt.x, 0.4, pt.z);
     scene.add(tireGroup);
     obstacles.push({ mesh: tireGroup, type: 'barrel', vx: 0, vz: 0, active: true });
   }
 
-  // A few barrels with rusty look
-  for (let i = 0; i < 8; i++) {
-    const barrelGeo = new THREE.CylinderGeometry(0.7, 0.7, 1.8, 12);
-    const barrelColor = [0x8B4513, 0x996633, 0x7a5230, 0xcc6600][i % 4];
-    const barrelMat = new THREE.MeshStandardMaterial({ color: barrelColor, roughness: 0.85 });
-    const barrel = new THREE.Mesh(barrelGeo, barrelMat);
-    const dist = 12 + Math.random() * 55;
-    const ang = Math.random() * Math.PI * 2;
-    barrel.position.set(Math.cos(ang) * dist, 0.9, Math.sin(ang) * dist);
-
-    const bandGeo = new THREE.TorusGeometry(0.72, 0.06, 4, 12);
-    const bandMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 });
-    const band1 = new THREE.Mesh(bandGeo, bandMat);
-    band1.position.y = 0.4; band1.rotation.x = Math.PI / 2;
-    barrel.add(band1);
-    const band2 = band1.clone(); band2.position.y = -0.4;
-    barrel.add(band2);
-
-    scene.add(barrel);
-    obstacles.push({ mesh: barrel, type: 'barrel', vx: 0, vz: 0, active: true });
-  }
-
-  // Extra ramps (dirt mounds) at edges
+  // Dirt mound ramps in each loop
   const rampPositions = [
-    { x: 35, z: 0, ry: 0 },
-    { x: -35, z: 0, ry: Math.PI },
-    { x: 0, z: 35, ry: Math.PI / 2 },
-    { x: 0, z: -35, ry: -Math.PI / 2 },
+    { x: 25, z: FIG8_LOOP_OFFSET, ry: 0 },
+    { x: -25, z: FIG8_LOOP_OFFSET, ry: Math.PI },
+    { x: 25, z: -FIG8_LOOP_OFFSET, ry: 0 },
+    { x: -25, z: -FIG8_LOOP_OFFSET, ry: Math.PI },
   ];
   rampPositions.forEach(rp => {
     const rampGroup = new THREE.Group();
@@ -2270,9 +2313,21 @@ function placeTrucks() {
       };
     }
 
-    t.mesh.position.x = Math.cos(angle) * dist;
-    t.mesh.position.z = Math.sin(angle) * dist;
-    t.rotationY = angle + Math.PI;
+    if (gameMode === 'cars2') {
+      // Spread cars around the figure-8: half in each loop
+      const loopZ = i < count / 2 ? FIG8_LOOP_OFFSET : -FIG8_LOOP_OFFSET;
+      const loopIdx = i < count / 2 ? i : i - Math.floor(count / 2);
+      const loopCount = i < count / 2 ? Math.floor(count / 2) : count - Math.floor(count / 2);
+      const a = (loopIdx / loopCount) * Math.PI * 2;
+      const spawnR = 25;
+      t.mesh.position.x = Math.cos(a) * spawnR;
+      t.mesh.position.z = Math.sin(a) * spawnR + loopZ;
+      t.rotationY = a + Math.PI;
+    } else {
+      t.mesh.position.x = Math.cos(angle) * dist;
+      t.mesh.position.z = Math.sin(angle) * dist;
+      t.rotationY = angle + Math.PI;
+    }
     t.mesh.rotation.y = t.rotationY;
     // Monster truck builders already add to scene; GLB cars need explicit add
     if (gameMode === 'cars2') scene.add(t.mesh);
@@ -2359,37 +2414,50 @@ function truckCollision(a, b) {
 }
 
 function wallCollision(t) {
-  const dx = t.mesh.position.x;
-  const dz = t.mesh.position.z;
-  const dist = Math.sqrt(dx * dx + dz * dz);
-  const wallLimit = ARENA_RADIUS - 6;
-  if (dist > wallLimit) {
-    // Wall normal (pointing inward)
-    const nx = -dx / dist;
-    const nz = -dz / dist;
+  const px = t.mesh.position.x;
+  const pz = t.mesh.position.z;
 
-    // Push car well inside the wall
-    t.mesh.position.x = (dx / dist) * (wallLimit - 3);
-    t.mesh.position.z = (dz / dist) * (wallLimit - 3);
+  let hitWall = false;
+  let nx, nz; // inward normal
 
-    // Car's movement direction
+  if (gameMode === 'cars2') {
+    // Figure-8 boundary check
+    const b = figure8Boundary(px, pz);
+    const wallLimit = b.loopR - 6;
+    if (b.dist > wallLimit) {
+      hitWall = true;
+      nx = -b.nx;
+      nz = -b.nz;
+      // Push inside
+      t.mesh.position.x = b.cx + b.nx * (wallLimit - 3);
+      t.mesh.position.z = b.cz + b.nz * (wallLimit - 3);
+    }
+  } else {
+    // Circular arena
+    const dist = Math.sqrt(px * px + pz * pz);
+    const wallLimit = ARENA_RADIUS - 6;
+    if (dist > wallLimit) {
+      hitWall = true;
+      nx = -px / dist;
+      nz = -pz / dist;
+      t.mesh.position.x = (px / dist) * (wallLimit - 3);
+      t.mesh.position.z = (pz / dist) * (wallLimit - 3);
+    }
+  }
+
+  if (hitWall) {
+    // Reflect direction off wall
     const moveX = Math.sin(t.rotationY);
     const moveZ = Math.cos(t.rotationY);
-
-    // Reflect direction off wall normal
     const dot = moveX * nx + moveZ * nz;
     const reflectX = moveX - 2 * dot * nx;
     const reflectZ = moveZ - 2 * dot * nz;
-
-    // Set new rotation to reflected angle
     t.rotationY = Math.atan2(reflectX, reflectZ);
     t.mesh.rotation.y = t.rotationY;
 
-    // Bounce back with some speed
     const prevSpeed = Math.abs(t.speed);
     t.speed = Math.max(prevSpeed * 0.4, 0.15);
 
-    // Wall damage based on impact speed
     t.health -= prevSpeed * 6;
     t.health = Math.max(0, t.health);
     t.flashTimer = 4;
