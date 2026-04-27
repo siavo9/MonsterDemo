@@ -961,58 +961,121 @@ function buildThunderHollowScene() {
   ground.position.y = 0;
   scene.add(ground);
 
-  // Mud puddles (darker wet patches)
-  for (let i = 0; i < 18; i++) {
-    const size = 3 + Math.random() * 8;
-    const puddleGeo = new THREE.CircleGeometry(size, 16);
-    const puddleMat = new THREE.MeshStandardMaterial({ color: 0x3d2b10, roughness: 0.4, metalness: 0.2 });
-    const puddle = new THREE.Mesh(puddleGeo, puddleMat);
-    puddle.rotation.x = -Math.PI / 2;
-    const dist = Math.random() * (ARENA_RADIUS - 15);
-    const ang = Math.random() * Math.PI * 2;
-    puddle.position.set(Math.cos(ang) * dist, 0.02, Math.sin(ang) * dist);
-    scene.add(puddle);
-  }
+  // --- FIGURE-8 DIRT TRACK painted on the arena floor ---
+  // Two overlapping loops form the 8-shape track
+  const TRACK_LOOP_RADIUS = 28;  // radius of each loop
+  const TRACK_LOOP_OFFSET = 22;  // distance from center to each loop center
+  const TRACK_WIDTH = 14;        // how wide the driving surface is
+  const trackSegments = 120;     // smoothness of the track path
+  const trackMat = new THREE.MeshStandardMaterial({ color: 0x4a3010, roughness: 0.85 }); // darker worn dirt
+  const trackEdgeMat = new THREE.MeshStandardMaterial({ color: 0x3a2008, roughness: 0.9 }); // even darker edges
 
-  // Tire track ruts in dirt
-  for (let i = 0; i < 40; i++) {
-    const len = 6 + Math.random() * 25;
-    const lineGeo = new THREE.PlaneGeometry(len, 0.4 + Math.random() * 0.6);
-    const lineMat = new THREE.MeshStandardMaterial({ color: 0x4a3515, roughness: 1 });
+  // Draw each loop of the figure-8 as a thick ring on the ground
+  [TRACK_LOOP_OFFSET, -TRACK_LOOP_OFFSET].forEach(zCenter => {
+    // Main track surface — ring of quads following the circle
+    for (let i = 0; i < trackSegments; i++) {
+      const a0 = (i / trackSegments) * Math.PI * 2;
+      const a1 = ((i + 1) / trackSegments) * Math.PI * 2;
+      const segLen = 2 * TRACK_LOOP_RADIUS * Math.sin(Math.PI / trackSegments) + 0.2;
+      const midA = (a0 + a1) / 2;
+
+      // Track surface
+      const seg = new THREE.Mesh(
+        new THREE.PlaneGeometry(TRACK_WIDTH, segLen),
+        trackMat
+      );
+      seg.rotation.x = -Math.PI / 2;
+      seg.rotation.z = -midA;
+      seg.position.set(
+        Math.cos(midA) * TRACK_LOOP_RADIUS,
+        0.03,
+        Math.sin(midA) * TRACK_LOOP_RADIUS + zCenter
+      );
+      scene.add(seg);
+    }
+
+    // White dashed center line
+    for (let i = 0; i < 30; i++) {
+      const a = (i / 30) * Math.PI * 2;
+      const dashGeo = new THREE.PlaneGeometry(0.4, 2.5);
+      const dashMat = new THREE.MeshStandardMaterial({ color: 0xccccaa, roughness: 0.8 });
+      const dash = new THREE.Mesh(dashGeo, dashMat);
+      dash.rotation.x = -Math.PI / 2;
+      dash.rotation.z = -a;
+      dash.position.set(
+        Math.cos(a) * TRACK_LOOP_RADIUS,
+        0.04,
+        Math.sin(a) * TRACK_LOOP_RADIUS + zCenter
+      );
+      scene.add(dash);
+    }
+
+    // Edge lines (slightly wider, darker strips on both sides)
+    [-1, 1].forEach(side => {
+      for (let i = 0; i < trackSegments; i++) {
+        const midA = ((i + 0.5) / trackSegments) * Math.PI * 2;
+        const edgeR = TRACK_LOOP_RADIUS + side * (TRACK_WIDTH / 2 - 0.3);
+        const segLen = 2 * Math.abs(edgeR) * Math.sin(Math.PI / trackSegments) + 0.2;
+        const edge = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.2, segLen),
+          trackEdgeMat
+        );
+        edge.rotation.x = -Math.PI / 2;
+        edge.rotation.z = -midA;
+        edge.position.set(
+          Math.cos(midA) * edgeR,
+          0.035,
+          Math.sin(midA) * edgeR + zCenter
+        );
+        scene.add(edge);
+      }
+    });
+  });
+
+  // Fill in the crossover zone where the two loops meet (the X of the 8)
+  const crossFillGeo = new THREE.PlaneGeometry(TRACK_WIDTH, TRACK_LOOP_OFFSET * 2 - TRACK_LOOP_RADIUS);
+  const crossFill = new THREE.Mesh(crossFillGeo, trackMat);
+  crossFill.rotation.x = -Math.PI / 2;
+  crossFill.position.set(0, 0.03, 0);
+  scene.add(crossFill);
+
+  // Tire track ruts on the figure-8 track
+  for (let i = 0; i < 50; i++) {
+    const len = 4 + Math.random() * 12;
+    const lineGeo = new THREE.PlaneGeometry(len, 0.3 + Math.random() * 0.4);
+    const lineMat = new THREE.MeshStandardMaterial({ color: 0x3a2510, roughness: 1 });
     const line = new THREE.Mesh(lineGeo, lineMat);
     line.rotation.x = -Math.PI / 2;
-    line.rotation.z = Math.random() * Math.PI;
-    const dist = Math.random() * (ARENA_RADIUS - 10);
+    // Place ruts along the track path
+    const loop = Math.random() < 0.5 ? 1 : -1;
     const ang = Math.random() * Math.PI * 2;
-    line.position.set(Math.cos(ang) * dist, 0.01, Math.sin(ang) * dist);
+    const rOff = (Math.random() - 0.5) * TRACK_WIDTH * 0.7;
+    line.rotation.z = ang + (Math.random() - 0.5) * 0.5;
+    line.position.set(
+      Math.cos(ang) * (TRACK_LOOP_RADIUS + rOff),
+      0.04,
+      Math.sin(ang) * (TRACK_LOOP_RADIUS + rOff) + loop * TRACK_LOOP_OFFSET
+    );
     scene.add(line);
   }
 
-  // --- FIGURE-8 CROSSOVER RAMP (center) ---
-  const crossGroup = new THREE.Group();
-  const crossMat = new THREE.MeshStandardMaterial({ color: 0x6b4e1f, roughness: 0.8 });
-  // Raised crossing bridge
-  const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(10, 0.4, 18), crossMat);
-  bridgeDeck.position.set(0, 2.5, 0);
-  crossGroup.add(bridgeDeck);
-  // Support pillars under bridge
-  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 0.9 });
-  [[-3, -6], [-3, 6], [3, -6], [3, 6]].forEach(([px, pz]) => {
-    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2.5, 6), pillarMat);
-    pillar.position.set(px, 1.25, pz);
-    crossGroup.add(pillar);
-  });
-  // Approach ramps for the bridge
-  const rampUpMat = new THREE.MeshStandardMaterial({ color: 0x7a5c2a, roughness: 0.7, side: THREE.DoubleSide });
-  [[-1, -14], [1, 14]].forEach(([dir, zOff]) => {
-    const rampGeo = new THREE.BoxGeometry(10, 0.3, 8);
-    const ramp = new THREE.Mesh(rampGeo, rampUpMat);
-    ramp.position.set(0, 1.25, zOff * 0.5);
-    ramp.rotation.x = dir * 0.3;
-    crossGroup.add(ramp);
-  });
-  scene.add(crossGroup);
-  ramps.push({ mesh: crossGroup, x: 0, z: 0, halfW: 5, halfD: 14, ry: 0 });
+  // Mud puddles on the track
+  for (let i = 0; i < 10; i++) {
+    const size = 2 + Math.random() * 4;
+    const puddleGeo = new THREE.CircleGeometry(size, 12);
+    const puddleMat = new THREE.MeshStandardMaterial({ color: 0x2a1808, roughness: 0.4, metalness: 0.15 });
+    const puddle = new THREE.Mesh(puddleGeo, puddleMat);
+    puddle.rotation.x = -Math.PI / 2;
+    const loop = Math.random() < 0.5 ? 1 : -1;
+    const ang = Math.random() * Math.PI * 2;
+    const rOff = (Math.random() - 0.5) * TRACK_WIDTH * 0.5;
+    puddle.position.set(
+      Math.cos(ang) * (TRACK_LOOP_RADIUS + rOff),
+      0.045,
+      Math.sin(ang) * (TRACK_LOOP_RADIUS + rOff) + loop * TRACK_LOOP_OFFSET
+    );
+    scene.add(puddle);
+  }
 
   // --- WALLS: wooden fence with tire stacks ---
   const wallSegments = 48;
