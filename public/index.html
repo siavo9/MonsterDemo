@@ -1041,28 +1041,26 @@ function buildThunderHollowScene() {
     scene.add(line);
   }
 
-  // --- FIGURE-8 CROSSOVER RAMP (center where loops meet) ---
-  const crossGroup = new THREE.Group();
-  const crossMat = new THREE.MeshStandardMaterial({ color: 0x6b4e1f, roughness: 0.8 });
-  const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(12, 0.4, 20), crossMat);
-  bridgeDeck.position.set(0, 2.5, 0);
-  crossGroup.add(bridgeDeck);
-  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 0.9 });
-  [[-4, -7], [-4, 7], [4, -7], [4, 7]].forEach(([px, pz]) => {
-    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2.5, 6), pillarMat);
-    pillar.position.set(px, 1.25, pz);
-    crossGroup.add(pillar);
-  });
-  const rampUpMat = new THREE.MeshStandardMaterial({ color: 0x7a5c2a, roughness: 0.7, side: THREE.DoubleSide });
-  [[-1, -16], [1, 16]].forEach(([dir, zOff]) => {
-    const rampGeo = new THREE.BoxGeometry(12, 0.3, 10);
-    const ramp = new THREE.Mesh(rampGeo, rampUpMat);
-    ramp.position.set(0, 1.25, zOff * 0.5);
-    ramp.rotation.x = dir * 0.25;
-    crossGroup.add(ramp);
-  });
-  scene.add(crossGroup);
-  ramps.push({ mesh: crossGroup, x: 0, z: 0, halfW: 6, halfD: 16, ry: 0 });
+  // --- CENTER CROSSING MARKER (flat, no obstruction) ---
+  // Just paint markings on the ground at the crossing point
+  const crossMat = new THREE.MeshStandardMaterial({ color: 0x4a3515, roughness: 0.9 });
+  // X-shaped crossing lines on the ground
+  for (let r = 0; r < 2; r++) {
+    const lineGeo = new THREE.PlaneGeometry(30, 1.5);
+    const line = new THREE.Mesh(lineGeo, crossMat);
+    line.rotation.x = -Math.PI / 2;
+    line.rotation.z = r === 0 ? Math.PI / 4 : -Math.PI / 4;
+    line.position.set(0, 0.03, 0);
+    scene.add(line);
+  }
+  // Circle marking at center
+  const centerRing = new THREE.Mesh(
+    new THREE.TorusGeometry(8, 0.5, 4, 32),
+    new THREE.MeshStandardMaterial({ color: 0x7a5c2a, roughness: 0.8 })
+  );
+  centerRing.rotation.x = Math.PI / 2;
+  centerRing.position.y = 0.03;
+  scene.add(centerRing);
 
   // --- WALLS: low wooden fence following figure-8 outline ---
   const wallSegs = 80;
@@ -2417,51 +2415,60 @@ function wallCollision(t) {
   const px = t.mesh.position.x;
   const pz = t.mesh.position.z;
 
-  let hitWall = false;
-  let nx, nz; // inward normal
-
   if (gameMode === 'cars2') {
-    // Figure-8 boundary check
-    const b = figure8Boundary(px, pz);
-    const wallLimit = b.loopR - 6;
-    if (b.dist > wallLimit) {
-      hitWall = true;
-      nx = -b.nx;
-      nz = -b.nz;
-      // Push inside
-      t.mesh.position.x = b.cx + b.nx * (wallLimit - 3);
-      t.mesh.position.z = b.cz + b.nz * (wallLimit - 3);
+    // Figure-8: check if outside BOTH loops
+    const d1 = Math.sqrt(px * px + (pz - FIG8_LOOP_OFFSET) * (pz - FIG8_LOOP_OFFSET));
+    const d2 = Math.sqrt(px * px + (pz + FIG8_LOOP_OFFSET) * (pz + FIG8_LOOP_OFFSET));
+    const inside1 = d1 < FIG8_LOOP_RADIUS - 4;
+    const inside2 = d2 < FIG8_LOOP_RADIUS - 4;
+
+    if (!inside1 && !inside2) {
+      // Outside both loops — push back into the nearest one
+      let cx = 0, cz, dist;
+      if (d1 < d2) { cz = FIG8_LOOP_OFFSET; dist = d1; }
+      else { cz = -FIG8_LOOP_OFFSET; dist = d2; }
+
+      if (dist > 0.01) {
+        const nx = (px - cx) / dist;
+        const nz = (pz - cz) / dist;
+        const pushDist = FIG8_LOOP_RADIUS - 8;
+        t.mesh.position.x = cx + nx * pushDist;
+        t.mesh.position.z = cz + nz * pushDist;
+
+        // Reverse speed and slow down
+        const prevSpeed = Math.abs(t.speed);
+        t.speed *= -0.3;
+        t.health -= prevSpeed * 4;
+        t.health = Math.max(0, t.health);
+        if (prevSpeed > 0.1) playSound('crash');
+      }
     }
   } else {
     // Circular arena
     const dist = Math.sqrt(px * px + pz * pz);
     const wallLimit = ARENA_RADIUS - 6;
     if (dist > wallLimit) {
-      hitWall = true;
-      nx = -px / dist;
-      nz = -pz / dist;
-      t.mesh.position.x = (px / dist) * (wallLimit - 3);
-      t.mesh.position.z = (pz / dist) * (wallLimit - 3);
+      const nx = px / dist;
+      const nz = pz / dist;
+      t.mesh.position.x = nx * (wallLimit - 3);
+      t.mesh.position.z = nz * (wallLimit - 3);
+
+      // Reflect direction
+      const moveX = Math.sin(t.rotationY);
+      const moveZ = Math.cos(t.rotationY);
+      const dot = moveX * (-nx) + moveZ * (-nz);
+      const reflectX = moveX - 2 * dot * (-nx);
+      const reflectZ = moveZ - 2 * dot * (-nz);
+      t.rotationY = Math.atan2(reflectX, reflectZ);
+      t.mesh.rotation.y = t.rotationY;
+
+      const prevSpeed = Math.abs(t.speed);
+      t.speed *= -0.3;
+      t.health -= prevSpeed * 4;
+      t.health = Math.max(0, t.health);
+      t.flashTimer = 4;
+      if (prevSpeed > 0.1) playSound('crash');
     }
-  }
-
-  if (hitWall) {
-    // Reflect direction off wall
-    const moveX = Math.sin(t.rotationY);
-    const moveZ = Math.cos(t.rotationY);
-    const dot = moveX * nx + moveZ * nz;
-    const reflectX = moveX - 2 * dot * nx;
-    const reflectZ = moveZ - 2 * dot * nz;
-    t.rotationY = Math.atan2(reflectX, reflectZ);
-    t.mesh.rotation.y = t.rotationY;
-
-    const prevSpeed = Math.abs(t.speed);
-    t.speed = Math.max(prevSpeed * 0.4, 0.15);
-
-    t.health -= prevSpeed * 6;
-    t.health = Math.max(0, t.health);
-    t.flashTimer = 4;
-    if (prevSpeed > 0.1) playSound('crash');
   }
 }
 
