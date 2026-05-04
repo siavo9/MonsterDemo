@@ -720,6 +720,21 @@ function buildScene() {
   ground.position.y = 0;
   scene.add(ground);
 
+  // FIGURE-8 DIRT TRACK on the arena floor
+  {
+    const trackMat = new THREE.MeshStandardMaterial({ color: 0x3d2a0d, roughness: 1.0 });
+    const trackOuter = 42;
+    const trackInner = 32;
+    const loopOffset = 36; // loops overlap a little in the middle to form the 8 crossover
+    [-1, 1].forEach(sign => {
+      const ringGeo = new THREE.RingGeometry(trackInner, trackOuter, 96);
+      const ring = new THREE.Mesh(ringGeo, trackMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(0, 0.02, sign * loopOffset);
+      scene.add(ring);
+    });
+  }
+
   // Dirt texture lines
   for (let i = 0; i < 30; i++) {
     const len = 5 + Math.random() * 20;
@@ -961,6 +976,21 @@ function buildThunderHollowScene() {
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = 0;
   scene.add(ground);
+
+  // FIGURE-8 DIRT TRACK on the arena floor
+  {
+    const trackMat = new THREE.MeshStandardMaterial({ color: 0x2e1f0a, roughness: 1.0 });
+    const trackOuter = 42;
+    const trackInner = 32;
+    const loopOffset = 36;
+    [-1, 1].forEach(sign => {
+      const ringGeo = new THREE.RingGeometry(trackInner, trackOuter, 96);
+      const ring = new THREE.Mesh(ringGeo, trackMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(0, 0.015, sign * loopOffset);
+      scene.add(ring);
+    });
+  }
 
   // Mud puddles (darker wet patches)
   for (let i = 0; i < 18; i++) {
