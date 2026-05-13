@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Zak's Demolition Derby</title>
+<title>Cars 3 Thunder Hollow Demolition Derby</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
@@ -36,18 +36,6 @@ canvas { display: block; }
   font-size: 0.85rem; text-transform: uppercase; letter-spacing: 3px;
   color: #888; margin-bottom: 10px; margin-top: 20px;
 }
-
-/* MODE TOGGLE */
-#modeToggle {
-  display: flex; gap: 10px; margin-bottom: 10px;
-}
-.mode-btn {
-  padding: 10px 24px; border-radius: 25px; border: 2px solid #555;
-  background: transparent; color: #ccc; font-size: 0.95rem; cursor: pointer;
-  transition: all 0.2s; font-weight: 600;
-}
-.mode-btn:hover { border-color: #ff6b35; color: #ff6b35; }
-.mode-btn.selected { background: #ff6b35; color: #fff; border-color: #ff6b35; }
 
 /* COLOR PICKER */
 #colorPicker {
@@ -170,22 +158,26 @@ canvas { display: block; }
   text-shadow: 0 0 40px rgba(247,201,72,0.6);
   pointer-events: none;
 }
+
+/* CREDIT FOOTER */
+#creditFooter {
+  position: fixed; bottom: 10px; left: 0; right: 0;
+  text-align: center; z-index: 101;
+  font-size: 0.85rem; color: #aaa; letter-spacing: 2px;
+  text-transform: uppercase; font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  pointer-events: none;
+}
 </style>
 </head>
 <body>
 
 <!-- START SCREEN -->
 <div id="startScreen">
-  <h1>Zak's<br>Demolition Derby</h1>
+  <h1>Cars 3<br>Thunder Hollow<br>Demolition Derby</h1>
   <h2>Smash. Crash. Be the Last One Standing.</h2>
 
-  <div class="section-label">Game Mode</div>
-  <div id="modeToggle">
-    <button class="mode-btn selected" data-mode="monster">Monster Trucks</button>
-    <button class="mode-btn" data-mode="cars2">Cars 3 Mode</button>
-  </div>
-
-  <div class="section-label" id="pickLabel">Pick Your Truck</div>
+  <div class="section-label" id="pickLabel">Pick Your Character</div>
   <div id="colorPicker"></div>
 
   <div class="section-label">Difficulty</div>
@@ -227,23 +219,12 @@ canvas { display: block; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
 // ============================================================
-// ZAK'S DEMOLITION DERBY
+// CARS 3 THUNDER HOLLOW DEMOLITION DERBY
 // ============================================================
 
 // --- CONSTANTS ---
 const ARENA_RADIUS = 85;
 const WALL_HEIGHT = 8;
-
-// Monster Truck mode colors/names
-const TRUCK_COLORS = [
-  '#e74c3c', '#3498db', '#2ecc71', '#f39c12',
-  '#9b59b6', '#e91e63', '#00bcd4', '#ff9800'
-];
-const TRUCK_COLOR_NAMES = [
-  'Red', 'Blue', 'Green', 'Orange',
-  'Purple', 'Pink', 'Cyan', 'Amber'
-];
-
 const GROUND_Y = 1.5;
 
 // Cars 3 mode characters (GLB models)
@@ -376,7 +357,6 @@ const HIT_SELF_DAMAGE_RATIO = 0.15;
 let scene, camera, renderer;
 let playerIndex = 0;
 let difficulty = 'medium';
-let gameMode = 'monster'; // 'monster' or 'cars2'
 let trucks = [];
 let obstacles = [];
 let ramps = [];
@@ -651,61 +631,30 @@ function stopBgMusic() {
 }
 
 // ============================================================
-// MODE TOGGLE & PICKER
+// CHARACTER PICKER
 // ============================================================
 function buildColorPicker() {
   const colorPickerEl = document.getElementById('colorPicker');
   colorPickerEl.innerHTML = '';
-  const pickLabel = document.getElementById('pickLabel');
 
-  if (gameMode === 'monster') {
-    pickLabel.textContent = 'Pick Your Truck';
-    TRUCK_COLORS.forEach((c, i) => {
-      const swatch = document.createElement('div');
-      swatch.className = 'color-swatch' + (i === playerIndex ? ' selected' : '');
-      swatch.style.background = c;
-      swatch.title = TRUCK_COLOR_NAMES[i];
-      swatch.textContent = TRUCK_COLOR_NAMES[i];
-      swatch.onclick = () => {
-        document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
-        swatch.classList.add('selected');
-        playerIndex = i;
-      };
-      colorPickerEl.appendChild(swatch);
-    });
-    if (playerIndex >= TRUCK_COLORS.length) playerIndex = 0;
-  } else {
-    pickLabel.textContent = 'Pick Your Character';
-    CARS2_CHARACTERS.forEach((c, i) => {
-      const swatch = document.createElement('div');
-      swatch.className = 'color-swatch' + (i === playerIndex ? ' selected' : '');
-      swatch.style.background = c.color;
-      swatch.title = c.name;
-      swatch.textContent = c.name;
-      swatch.style.width = '80px';
-      swatch.style.height = '55px';
-      swatch.style.fontSize = '0.5rem';
-      swatch.onclick = () => {
-        document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
-        swatch.classList.add('selected');
-        playerIndex = i;
-      };
-      colorPickerEl.appendChild(swatch);
-    });
-    if (playerIndex >= CARS2_CHARACTERS.length) playerIndex = 0;
-  }
+  CARS2_CHARACTERS.forEach((c, i) => {
+    const swatch = document.createElement('div');
+    swatch.className = 'color-swatch' + (i === playerIndex ? ' selected' : '');
+    swatch.style.background = c.color;
+    swatch.title = c.name;
+    swatch.textContent = c.name;
+    swatch.style.width = '80px';
+    swatch.style.height = '55px';
+    swatch.style.fontSize = '0.5rem';
+    swatch.onclick = () => {
+      document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+      swatch.classList.add('selected');
+      playerIndex = i;
+    };
+    colorPickerEl.appendChild(swatch);
+  });
+  if (playerIndex >= CARS2_CHARACTERS.length) playerIndex = 0;
 }
-
-// Mode toggle buttons
-document.querySelectorAll('.mode-btn').forEach(btn => {
-  btn.onclick = () => {
-    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-    gameMode = btn.dataset.mode;
-    playerIndex = 0;
-    buildColorPicker();
-  };
-});
 
 // Difficulty picker
 document.querySelectorAll('.diff-btn').forEach(btn => {
@@ -734,262 +683,7 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 
 // ============================================================
-// BUILD SCENE
-// ============================================================
-function buildScene() {
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x1a0a2e);
-  scene.fog = new THREE.Fog(0x1a0a2e, 120, 200);
-
-  // LIGHTS
-  const ambient = new THREE.AmbientLight(0xffffff, 0.4);
-  scene.add(ambient);
-  const dirLight = new THREE.DirectionalLight(0xfff4e0, 0.8);
-  dirLight.position.set(30, 50, 20);
-  dirLight.castShadow = true;
-  scene.add(dirLight);
-
-  // Stadium spotlights
-  const spotColors = [0xff6b35, 0xf7c948, 0x3498db, 0x2ecc71];
-  for (let i = 0; i < 4; i++) {
-    const angle = (i / 4) * Math.PI * 2;
-    const spot = new THREE.SpotLight(spotColors[i], 0.6, 200, 0.5, 0.5);
-    spot.position.set(Math.cos(angle) * 70, 40, Math.sin(angle) * 70);
-    spot.target.position.set(0, 0, 0);
-    scene.add(spot);
-    scene.add(spot.target);
-
-    const poleGeo = new THREE.CylinderGeometry(0.3, 0.5, 40, 6);
-    const poleMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
-    const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.set(Math.cos(angle) * 72, 20, Math.sin(angle) * 72);
-    scene.add(pole);
-
-    const fixGeo = new THREE.BoxGeometry(3, 1, 3);
-    const fixMat = new THREE.MeshStandardMaterial({ color: spotColors[i], emissive: spotColors[i], emissiveIntensity: 0.8 });
-    const fix = new THREE.Mesh(fixGeo, fixMat);
-    fix.position.set(Math.cos(angle) * 70, 40, Math.sin(angle) * 70);
-    scene.add(fix);
-  }
-
-  // GROUND
-  const groundGeo = new THREE.CircleGeometry(ARENA_RADIUS, 64);
-  const groundMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 1.0 });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = 0;
-  scene.add(ground);
-
-  // FIGURE-8 DIRT TRACK on the arena floor
-  {
-    const trackMat = new THREE.MeshStandardMaterial({ color: 0x3d2a0d, roughness: 1.0 });
-    const trackOuter = 42;
-    const trackInner = 32;
-    const loopOffset = 36; // loops overlap a little in the middle to form the 8 crossover
-    [-1, 1].forEach(sign => {
-      const ringGeo = new THREE.RingGeometry(trackInner, trackOuter, 96);
-      const ring = new THREE.Mesh(ringGeo, trackMat);
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.set(0, 0.02, sign * loopOffset);
-      scene.add(ring);
-    });
-  }
-
-  // Dirt texture lines
-  for (let i = 0; i < 30; i++) {
-    const len = 5 + Math.random() * 20;
-    const lineGeo = new THREE.PlaneGeometry(len, 0.3 + Math.random() * 0.5);
-    const lineMat = new THREE.MeshStandardMaterial({ color: 0x7a5c10, roughness: 1 });
-    const line = new THREE.Mesh(lineGeo, lineMat);
-    line.rotation.x = -Math.PI / 2;
-    line.rotation.z = Math.random() * Math.PI;
-    const dist = Math.random() * (ARENA_RADIUS - 10);
-    const ang = Math.random() * Math.PI * 2;
-    line.position.set(Math.cos(ang) * dist, 0.01, Math.sin(ang) * dist);
-    scene.add(line);
-  }
-
-  // WALLS
-  const wallSegments = 48;
-  for (let i = 0; i < wallSegments; i++) {
-    const angle = (i / wallSegments) * Math.PI * 2;
-    const nextAngle = ((i + 1) / wallSegments) * Math.PI * 2;
-    const wallGeo = new THREE.BoxGeometry(
-      2 * ARENA_RADIUS * Math.sin(Math.PI / wallSegments), WALL_HEIGHT, 2
-    );
-    const wallMat = new THREE.MeshStandardMaterial({
-      color: i % 2 === 0 ? 0xcc3333 : 0xeeeeee
-    });
-    const wall = new THREE.Mesh(wallGeo, wallMat);
-    const midAngle = (angle + nextAngle) / 2;
-    wall.position.set(
-      Math.cos(midAngle) * (ARENA_RADIUS + 0.5),
-      WALL_HEIGHT / 2,
-      Math.sin(midAngle) * (ARENA_RADIUS + 0.5)
-    );
-    wall.rotation.y = -midAngle + Math.PI / 2;
-    scene.add(wall);
-  }
-
-  // STADIUM STANDS
-  for (let tier = 0; tier < 3; tier++) {
-    const r = ARENA_RADIUS + 5 + tier * 8;
-    const h = WALL_HEIGHT + tier * 5;
-    const standGeo = new THREE.TorusGeometry(r, 3, 4, 48);
-    const standMat = new THREE.MeshStandardMaterial({
-      color: tier === 0 ? 0x555555 : tier === 1 ? 0x444444 : 0x333333
-    });
-    const stand = new THREE.Mesh(standGeo, standMat);
-    stand.rotation.x = Math.PI / 2;
-    stand.position.y = h;
-    scene.add(stand);
-
-    const fanCount = 80 + tier * 40;
-    for (let f = 0; f < fanCount; f++) {
-      const ang = (f / fanCount) * Math.PI * 2;
-      const fanGeo = new THREE.SphereGeometry(0.4, 4, 4);
-      const fanColor = [0xff6b35, 0xf7c948, 0x3498db, 0xe74c3c, 0x2ecc71, 0xff69b4, 0xffffff][Math.floor(Math.random() * 7)];
-      const fanMat = new THREE.MeshStandardMaterial({ color: fanColor });
-      const fan = new THREE.Mesh(fanGeo, fanMat);
-      fan.position.set(
-        Math.cos(ang) * (r + (Math.random() - 0.5) * 4),
-        h + 1.5 + Math.random() * 2,
-        Math.sin(ang) * (r + (Math.random() - 0.5) * 4)
-      );
-      fan.userData.baseY = fan.position.y;
-      fan.userData.bobSpeed = 2 + Math.random() * 3;
-      fan.userData.bobAmp = 0.2 + Math.random() * 0.3;
-      scene.add(fan);
-      obstacles.push({ mesh: fan, type: 'fan' });
-    }
-  }
-
-  // TITLE SIGN
-  const signGeo = new THREE.BoxGeometry(40, 8, 1);
-  const signMat = new THREE.MeshStandardMaterial({ color: 0x1a0a2e });
-  const sign = new THREE.Mesh(signGeo, signMat);
-  sign.position.set(0, 28, -(ARENA_RADIUS + 25));
-  scene.add(sign);
-
-  const signBorderGeo = new THREE.BoxGeometry(42, 9, 0.5);
-  const signBorderMat = new THREE.MeshStandardMaterial({ color: 0xf7c948, emissive: 0xf7c948, emissiveIntensity: 0.5 });
-  const signBorder = new THREE.Mesh(signBorderGeo, signBorderMat);
-  signBorder.position.set(0, 28, -(ARENA_RADIUS + 25.3));
-  scene.add(signBorder);
-
-  // RAMPS
-  const rampPositions = [
-    { x: 25, z: 0, ry: 0 },
-    { x: -25, z: 0, ry: Math.PI },
-    { x: 0, z: 25, ry: Math.PI / 2 },
-    { x: 0, z: -25, ry: -Math.PI / 2 },
-  ];
-  const rampColor = 0xff6b20;
-  rampPositions.forEach(rp => {
-    const rampGroup = new THREE.Group();
-    rampGroup.position.set(rp.x, 0, rp.z);
-    rampGroup.rotation.y = rp.ry;
-
-    const rampW = 8;
-    const rampLen = 12;
-    const rampH = 3.5;
-    const segments = 16;
-    const rampMat = new THREE.MeshStandardMaterial({ color: rampColor, roughness: 0.6, side: THREE.DoubleSide });
-
-    for (let i = 0; i < segments; i++) {
-      const t0 = i / segments;
-      const t1 = (i + 1) / segments;
-      const z0 = -rampLen / 2 + t0 * rampLen;
-      const z1 = -rampLen / 2 + t1 * rampLen;
-      const y0 = Math.sin(t0 * Math.PI / 2) * rampH;
-      const y1 = Math.sin(t1 * Math.PI / 2) * rampH;
-      const segLen = Math.sqrt((z1 - z0) ** 2 + (y1 - y0) ** 2);
-      const segAngle = Math.atan2(y1 - y0, z1 - z0);
-
-      const seg = new THREE.Mesh(new THREE.BoxGeometry(rampW, 0.15, segLen + 0.05), rampMat);
-      seg.position.set(0, (y0 + y1) / 2, (z0 + z1) / 2);
-      seg.rotation.x = -segAngle;
-      rampGroup.add(seg);
-    }
-
-    const sideMat = new THREE.MeshStandardMaterial({ color: 0xe05a10, roughness: 0.7 });
-    [-rampW / 2 - 0.15, rampW / 2 + 0.15].forEach(x => {
-      for (let i = 0; i < segments; i++) {
-        const t0 = i / segments;
-        const t1 = (i + 1) / segments;
-        const z0 = -rampLen / 2 + t0 * rampLen;
-        const z1 = -rampLen / 2 + t1 * rampLen;
-        const y0 = Math.sin(t0 * Math.PI / 2) * rampH;
-        const y1 = Math.sin(t1 * Math.PI / 2) * rampH;
-        const segLen = Math.sqrt((z1 - z0) ** 2 + (y1 - y0) ** 2);
-        const segAngle = Math.atan2(y1 - y0, z1 - z0);
-        const wallH = 0.8;
-
-        const wall = new THREE.Mesh(new THREE.BoxGeometry(0.15, wallH, segLen + 0.05), sideMat);
-        wall.position.set(x, (y0 + y1) / 2 + wallH / 2, (z0 + z1) / 2);
-        wall.rotation.x = -segAngle;
-        rampGroup.add(wall);
-      }
-    });
-
-    const padGeo = new THREE.BoxGeometry(rampW, 0.2, 3);
-    const pad = new THREE.Mesh(padGeo, rampMat);
-    pad.position.set(0, rampH, rampLen / 2 + 1);
-    rampGroup.add(pad);
-
-    scene.add(rampGroup);
-    ramps.push({ mesh: rampGroup, x: rp.x, z: rp.z, halfW: 4, halfD: 7, ry: rp.ry });
-  });
-
-  // CRATES
-  for (let i = 0; i < 15; i++) {
-    const size = 1.2 + Math.random() * 1.5;
-    const crateGeo = new THREE.BoxGeometry(size, size, size);
-    const crateMat = new THREE.MeshStandardMaterial({ color: 0xc8a25c });
-    const crate = new THREE.Mesh(crateGeo, crateMat);
-    const dist = 10 + Math.random() * 55;
-    const ang = Math.random() * Math.PI * 2;
-    crate.position.set(Math.cos(ang) * dist, size / 2, Math.sin(ang) * dist);
-    crate.rotation.y = Math.random() * Math.PI;
-
-    const stripGeo = new THREE.BoxGeometry(size * 0.1, size, size * 1.02);
-    const stripMat = new THREE.MeshStandardMaterial({ color: 0x8B6914 });
-    const strip1 = new THREE.Mesh(stripGeo, stripMat);
-    crate.add(strip1);
-    const strip2 = new THREE.Mesh(new THREE.BoxGeometry(size * 1.02, size, size * 0.1), stripMat);
-    crate.add(strip2);
-
-    scene.add(crate);
-    obstacles.push({ mesh: crate, type: 'crate', vx: 0, vz: 0, size, active: true });
-  }
-
-  // BARRELS
-  for (let i = 0; i < 20; i++) {
-    const barrelGeo = new THREE.CylinderGeometry(0.7, 0.7, 1.8, 12);
-    const barrelColor = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12][i % 4];
-    const barrelMat = new THREE.MeshStandardMaterial({ color: barrelColor });
-    const barrel = new THREE.Mesh(barrelGeo, barrelMat);
-    const dist = 8 + Math.random() * 60;
-    const ang = Math.random() * Math.PI * 2;
-    barrel.position.set(Math.cos(ang) * dist, 0.9, Math.sin(ang) * dist);
-
-    const bandGeo = new THREE.TorusGeometry(0.72, 0.06, 4, 12);
-    const bandMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-    const band1 = new THREE.Mesh(bandGeo, bandMat);
-    band1.position.y = 0.4;
-    band1.rotation.x = Math.PI / 2;
-    barrel.add(band1);
-    const band2 = band1.clone();
-    band2.position.y = -0.4;
-    barrel.add(band2);
-
-    scene.add(barrel);
-    obstacles.push({ mesh: barrel, type: 'barrel', vx: 0, vz: 0, active: true });
-  }
-}
-
-// ============================================================
-// BUILD THUNDER HOLLOW SCENE (Cars 3 Mode)
+// BUILD THUNDER HOLLOW SCENE
 // ============================================================
 function buildThunderHollowScene() {
   scene = new THREE.Scene();
@@ -1406,198 +1100,6 @@ function buildThunderHollowScene() {
   });
 }
 
-
-// ============================================================
-// BUILD MONSTER TRUCK (original)
-// ============================================================
-function createMonsterTruck(color, index) {
-  const group = new THREE.Group();
-  const paintMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.4 });
-  const darkMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.6 });
-  const chromeMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9, roughness: 0.1 });
-
-  // CHASSIS
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, metalness: 0.7 });
-  [-0.6, 0.6].forEach(x => {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.25, 5.0), frameMat);
-    rail.position.set(x, 0.0, 0);
-    group.add(rail);
-  });
-  [-1.5, 0, 1.5].forEach(z => {
-    const cross = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.2, 0.2), frameMat);
-    cross.position.set(0, 0.0, z);
-    group.add(cross);
-  });
-  const xGeo1 = new THREE.BoxGeometry(0.1, 0.15, 4.0);
-  const xb1 = new THREE.Mesh(xGeo1, frameMat);
-  xb1.position.set(0, -0.05, 0);
-  xb1.rotation.y = 0.18;
-  group.add(xb1);
-  const xb2 = new THREE.Mesh(xGeo1, frameMat);
-  xb2.position.set(0, -0.05, 0);
-  xb2.rotation.y = -0.18;
-  group.add(xb2);
-
-  // SUSPENSION
-  const shockMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.8 });
-  const springMat = new THREE.MeshStandardMaterial({ color: 0xdd3333 });
-  const wheelPositions = [
-    { x: -2.0, y: -0.3, z: 1.7 },
-    { x: 2.0, y: -0.3, z: 1.7 },
-    { x: -2.0, y: -0.3, z: -1.7 },
-    { x: 2.0, y: -0.3, z: -1.7 }
-  ];
-  wheelPositions.forEach(wp => {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(Math.abs(wp.x) - 0.5, 0.12, 0.12), frameMat);
-    arm.position.set(wp.x * 0.55, 0.1, wp.z);
-    group.add(arm);
-    const shock = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.4, 6), shockMat);
-    shock.position.set(wp.x * 0.75, 0.7, wp.z);
-    group.add(shock);
-    for (let s = 0; s < 4; s++) {
-      const coil = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.025, 4, 8), springMat);
-      coil.position.set(wp.x * 0.75, 0.25 + s * 0.28, wp.z);
-      coil.rotation.x = Math.PI / 2;
-      group.add(coil);
-    }
-  });
-
-  // BODY
-  const hoodGeo = new THREE.BoxGeometry(2.8, 1.0, 2.4);
-  const hood = new THREE.Mesh(hoodGeo, paintMat);
-  hood.position.set(0, 1.6, 1.1);
-  group.add(hood);
-
-  const scoopGeo = new THREE.BoxGeometry(0.8, 0.25, 1.0);
-  const scoop = new THREE.Mesh(scoopGeo, paintMat);
-  scoop.position.set(0, 2.2, 1.2);
-  group.add(scoop);
-
-  const bumperGeo = new THREE.BoxGeometry(3.0, 0.5, 0.3);
-  const bumper = new THREE.Mesh(bumperGeo, chromeMat);
-  bumper.position.set(0, 1.2, 2.4);
-  group.add(bumper);
-
-  const grilleMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
-  const grilleGeo = new THREE.BoxGeometry(2.0, 0.6, 0.1);
-  const grille = new THREE.Mesh(grilleGeo, grilleMat);
-  grille.position.set(0, 1.6, 2.32);
-  group.add(grille);
-  for (let g = -0.2; g <= 0.2; g += 0.1) {
-    const slat = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.03, 0.12), chromeMat);
-    slat.position.set(0, 1.6 + g, 2.33);
-    group.add(slat);
-  }
-
-  // CAB
-  const cabGeo = new THREE.BoxGeometry(2.6, 1.2, 2.0);
-  const cab = new THREE.Mesh(cabGeo, paintMat);
-  cab.position.set(0, 2.7, -0.2);
-  group.add(cab);
-
-  const windGeo = new THREE.BoxGeometry(2.2, 0.9, 0.08);
-  const windMat = new THREE.MeshStandardMaterial({ color: 0x446688, roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.6 });
-  const wind = new THREE.Mesh(windGeo, windMat);
-  wind.position.set(0, 2.65, 0.85);
-  wind.rotation.x = 0.25;
-  group.add(wind);
-
-  const rearWind = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 0.08), windMat);
-  rearWind.position.set(0, 2.7, -1.15);
-  group.add(rearWind);
-
-  [-1.32, 1.32].forEach(x => {
-    const sideWin = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.7, 1.4), windMat);
-    sideWin.position.set(x, 2.7, -0.1);
-    group.add(sideWin);
-  });
-
-  const roofGeo = new THREE.BoxGeometry(2.65, 0.12, 2.05);
-  const roof = new THREE.Mesh(roofGeo, paintMat);
-  roof.position.set(0, 3.32, -0.2);
-  group.add(roof);
-
-  // BED
-  const bedFloor = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.15, 2.6), paintMat);
-  bedFloor.position.set(0, 1.55, -1.9);
-  group.add(bedFloor);
-  [-1.35, 1.35].forEach(x => {
-    const side = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.7, 2.6), paintMat);
-    side.position.set(x, 1.95, -1.9);
-    group.add(side);
-  });
-  const tailgate = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.7, 0.12), paintMat);
-  tailgate.position.set(0, 1.95, -3.15);
-  group.add(tailgate);
-  const rBumper = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.4, 0.25), chromeMat);
-  rBumper.position.set(0, 1.25, -3.2);
-  group.add(rBumper);
-
-  // HEADLIGHTS
-  [-1.05, 1.05].forEach(x => {
-    const hlGeo = new THREE.SphereGeometry(0.22, 8, 8);
-    const hlMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffcc, emissiveIntensity: 0.9 });
-    const hl = new THREE.Mesh(hlGeo, hlMat);
-    hl.position.set(x, 1.65, 2.35);
-    group.add(hl);
-  });
-
-  [-1.1, 1.1].forEach(x => {
-    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.1),
-      new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.5 }));
-    tl.position.set(x, 1.8, -3.22);
-    group.add(tl);
-  });
-
-  // EXHAUST
-  [-1.45, 1.45].forEach(x => {
-    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 2.5, 8), darkMat);
-    pipe.position.set(x, 2.3, 0.3);
-    group.add(pipe);
-    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.2, 8), chromeMat);
-    tip.position.set(x, 3.55, 0.3);
-    group.add(tip);
-  });
-
-  // MONSTER WHEELS
-  const wheelRadius = 1.5;
-  const wheelWidth = 1.2;
-  const tireGeo = new THREE.TorusGeometry(wheelRadius, wheelWidth / 2, 16, 24);
-  const tireMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
-  const hubGeo = new THREE.CylinderGeometry(0.6, 0.6, wheelWidth * 0.3, 12);
-  const hubMat = new THREE.MeshStandardMaterial({ color: 0xddaa00, metalness: 0.8, roughness: 0.2 });
-
-  const wheels = [];
-  wheelPositions.forEach(wp => {
-    const tire = new THREE.Mesh(tireGeo, tireMat);
-    tire.rotation.z = Math.PI / 2;
-    tire.rotation.y = Math.PI / 2;
-    tire.position.set(wp.x, wp.y, wp.z);
-    group.add(tire);
-    const hub = new THREE.Mesh(hubGeo, hubMat);
-    hub.rotation.z = Math.PI / 2;
-    hub.position.set(wp.x, wp.y, wp.z);
-    group.add(hub);
-    wheels.push(tire);
-  });
-
-  // ROLL CAGE
-  const cageMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.9 });
-  [3.0, 3.35].forEach(y => {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.07, 0.07), cageMat);
-    bar.position.set(0, y, -1.2);
-    group.add(bar);
-  });
-  [-1.2, 1.2].forEach(x => {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.6, 0.07), cageMat);
-    post.position.set(x, 3.15, -1.2);
-    group.add(post);
-  });
-
-  group.position.y = GROUND_Y;
-  scene.add(group);
-  return { mesh: group, wheels, color, index };
-}
 
 // ============================================================
 // CARS 2 MODE — Character Builders with EYES on windshield
@@ -2298,104 +1800,44 @@ function createCruzRamirez(index) {
 }
 
 // ============================================================
-// UNIFIED TRUCK CREATOR
-// ============================================================
-function createTruck(colorOrChar, index) {
-  if (gameMode === 'monster') {
-    return createMonsterTruck(colorOrChar, index);
-  }
-
-  // Cars 2 mode — pick the right builder
-  const charIndex = index % CARS2_CHARACTERS.length;
-  const builders = [createMrsFritter, createDrDamage, createArvy, createAPB, createLightningMcQueen, createCruzRamirez];
-  const result = builders[charIndex](index);
-
-  return {
-    ...result,
-    health: MAX_HEALTH,
-    speed: 0,
-    rotationY: 0,
-    vy: 0,
-    onGround: true,
-    alive: true,
-    boosts: 3,
-    boosting: false,
-    boostTimer: 0,
-    jumpCooldown: 0,
-    aiTimer: 0,
-    aiTargetAngle: 0,
-    aiAccel: false,
-    aiTarget: null,
-    flashTimer: 0,
-    smokeParticles: []
-  };
-}
-
-// ============================================================
-// PLACE TRUCKS
+// PLACE CARS
 // ============================================================
 function placeTrucks() {
   trucks = [];
   eliminationOrder = [];
-  const count = gameMode === 'monster' ? 8 : CARS2_CHARACTERS.length;
+  const count = CARS2_CHARACTERS.length;
 
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * Math.PI * 2;
     const dist = 35;
-    let t;
 
-    if (gameMode === 'monster') {
-      const raw = createMonsterTruck(TRUCK_COLORS[i], i);
-      t = {
-        ...raw,
-        health: MAX_HEALTH,
-        speed: 0,
-        rotationY: 0,
-        vy: 0,
-        onGround: true,
-        alive: true,
-        boosts: 3,
-        boosting: false,
-        boostTimer: 0,
-        jumpCooldown: 0,
-        aiTimer: 0,
-        aiTargetAngle: 0,
-        aiAccel: false,
-        aiTarget: null,
-        flashTimer: 0,
-        smokeParticles: []
-      };
-    } else {
-      // Cars 3 mode — use GLB models
-      const charIndex = i % CARS2_CHARACTERS.length;
-      const raw = createGLBCar(charIndex, i);
-      t = {
-        ...raw,
-        health: MAX_HEALTH,
-        speed: 0,
-        rotationY: 0,
-        vy: 0,
-        onGround: true,
-        alive: true,
-        boosts: 3,
-        boosting: false,
-        boostTimer: 0,
-        jumpCooldown: 0,
-        aiTimer: 0,
-        aiTargetAngle: 0,
-        aiAccel: false,
-        aiTarget: null,
-        flashTimer: 0,
-        smokeParticles: []
-      };
-    }
+    const charIndex = i % CARS2_CHARACTERS.length;
+    const raw = createGLBCar(charIndex, i);
+    const t = {
+      ...raw,
+      health: MAX_HEALTH,
+      speed: 0,
+      rotationY: 0,
+      vy: 0,
+      onGround: true,
+      alive: true,
+      boosts: 3,
+      boosting: false,
+      boostTimer: 0,
+      jumpCooldown: 0,
+      aiTimer: 0,
+      aiTargetAngle: 0,
+      aiAccel: false,
+      aiTarget: null,
+      flashTimer: 0,
+      smokeParticles: []
+    };
 
     t.mesh.position.x = Math.cos(angle) * dist;
     t.mesh.position.z = Math.sin(angle) * dist;
     t.rotationY = angle + Math.PI;
     t.mesh.rotation.y = t.rotationY;
-    // Monster truck builders already add to scene; GLB cars need explicit add
-    if (gameMode === 'cars2') scene.add(t.mesh);
+    scene.add(t.mesh);
     trucks.push(t);
   }
   boostsLeft = 3;
@@ -2828,7 +2270,7 @@ function updateHUD() {
     const isPlayer = i === playerIndex;
     const label = isPlayer ? '► YOU' : '';
     const opacity = t.alive ? 1 : 0.3;
-    const name = t.charName || TRUCK_COLOR_NAMES[i] || '';
+    const name = t.charName || '';
     html += `<div class="truck-indicator" style="opacity:${opacity}">
       <span class="truck-name">${name}</span>
       <span style="color:#ccc;font-size:0.65rem;width:35px;text-align:right">${label}</span>
@@ -2926,24 +2368,8 @@ function gameLoop(time) {
     wallCollision(t);
     obstacleCollision(t);
 
-    // Only spin wheels for monster truck mode (box geometry wheels)
-    // GLB models have pre-oriented wheels that don't need manual rotation
-    if (gameMode === 'monster') {
-      t.wheels.forEach(w => { w.rotation.x += t.speed * 0.5; });
-    }
-
     if (t.flashTimer > 0) {
       t.flashTimer--;
-      // Only flash on monster trucks — GLB models look bad with emissive override
-      if (gameMode === 'monster') {
-        const flashOn = t.flashTimer > 0 && t.flashTimer % 2 === 0;
-        t.mesh.traverse(child => {
-          if (child.isMesh && child.material && child.material.emissive) {
-            child.material.emissive.set(flashOn ? 0xffffff : 0x000000);
-            child.material.emissiveIntensity = flashOn ? 0.8 : 0;
-          }
-        });
-      }
     }
 
     if (Math.abs(t.speed) > 0.2 && t.onGround && Math.random() < 0.15) {
@@ -3023,22 +2449,16 @@ async function startGame() {
     document.body.appendChild(renderer.domElement);
   }
 
-  // Preload GLB models for Cars 3 mode
-  if (gameMode === 'cars2') {
-    const startBtn = document.getElementById('startBtn');
-    startBtn.textContent = 'LOADING MODELS...';
-    startBtn.style.pointerEvents = 'none';
-    await preloadAllGLBModels();
-    startBtn.textContent = 'START';
-    startBtn.style.pointerEvents = '';
-  }
+  // Preload GLB models
+  const startBtn = document.getElementById('startBtn');
+  startBtn.textContent = 'LOADING MODELS...';
+  startBtn.style.pointerEvents = 'none';
+  await preloadAllGLBModels();
+  startBtn.textContent = 'START';
+  startBtn.style.pointerEvents = '';
 
   setupCamera();
-  if (gameMode === 'cars2') {
-    buildThunderHollowScene();
-  } else {
-    buildScene();
-  }
+  buildThunderHollowScene();
   placeTrucks();
 
   document.getElementById('startScreen').style.display = 'none';
@@ -3089,7 +2509,7 @@ function endGame(won) {
   stopBgMusic();
 
   const totalCount = trucks.length;
-  const vehicleWord = gameMode === 'cars2' ? 'car' : 'truck';
+  const vehicleWord = 'car';
 
   if (won) {
     playSound('victory');
@@ -3128,5 +2548,8 @@ window.addEventListener('resize', () => {
 });
 
 </script>
+
+<div id="creditFooter">Made by Ovi, For Zak</div>
+
 </body>
 </html>
