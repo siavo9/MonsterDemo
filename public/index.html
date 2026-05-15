@@ -360,6 +360,7 @@ let difficulty = 'medium';
 let trucks = [];
 let obstacles = [];
 let ramps = [];
+let fans = [];
 let gameRunning = false;
 let keys = {};
 let boostsLeft = 3;
@@ -871,8 +872,10 @@ function buildThunderHollowScene() {
   }
 
   // --- LARGE FIRE PITS at the center of each figure-8 loop ---
-  spawnFireBrazier(0, 0, 36, 2.4);
-  spawnFireBrazier(0, 0, -36, 2.4);
+  // These two are the only braziers with real dynamic lights — keeps the warm
+  // arena glow without paying for 26 PointLights.
+  spawnFireBrazier(0, 0, 36, 2.4, true);
+  spawnFireBrazier(0, 0, -36, 2.4, true);
 
   // --- SMALLER FIRE PITS along the inner edge of each loop (extra drama) ---
   [36, -36].forEach(zCenter => {
@@ -929,8 +932,11 @@ function buildThunderHollowScene() {
       fan.userData.baseY = fan.position.y;
       fan.userData.bobSpeed = 2 + Math.random() * 3;
       fan.userData.bobAmp = 0.2 + Math.random() * 0.3;
+      fan.userData.phase = Math.random() * Math.PI * 2;
       scene.add(fan);
-      obstacles.push({ mesh: fan, type: 'fan' });
+      // Fans are decorative — keep them out of `obstacles` so trucks don't
+      // distance-check 360 spheres every frame just to skip them.
+      fans.push(fan);
     }
   }
 
@@ -1961,7 +1967,6 @@ function wallCollision(t) {
 
 function obstacleCollision(t) {
   obstacles.forEach(ob => {
-    if (ob.type === 'fan') return;
     if (!ob.active) return;
     const dx = t.mesh.position.x - ob.mesh.position.x;
     const dz = t.mesh.position.z - ob.mesh.position.z;
@@ -1979,13 +1984,21 @@ function obstacleCollision(t) {
   });
 }
 
+let fanFrame = 0;
+function updateFans() {
+  // Crowd bob doesn't need every frame — 20Hz looks identical and saves work.
+  fanFrame = (fanFrame + 1) % 3;
+  if (fanFrame !== 0) return;
+  const t = performance.now() / 1000;
+  for (let i = 0; i < fans.length; i++) {
+    const f = fans[i];
+    const ud = f.userData;
+    f.position.y = ud.baseY + Math.sin(t * ud.bobSpeed + ud.phase) * ud.bobAmp;
+  }
+}
+
 function updateObstacles() {
   obstacles.forEach(ob => {
-    if (ob.type === 'fan') {
-      const t = performance.now() / 1000;
-      ob.mesh.position.y = ob.mesh.userData.baseY + Math.sin(t * ob.mesh.userData.bobSpeed) * ob.mesh.userData.bobAmp;
-      return;
-    }
     if (!ob.active) return;
     if (ob.vx || ob.vz) {
       ob.mesh.position.x += (ob.vx || 0);
@@ -2136,7 +2149,7 @@ function updateSmoke() {
 // ============================================================
 let fireFlames = [];
 
-function spawnFireBrazier(x, y, z, scale) {
+function spawnFireBrazier(x, y, z, scale, withLight) {
   scale = scale || 1;
   const group = new THREE.Group();
   group.position.set(x, y, z);
@@ -2170,10 +2183,16 @@ function spawnFireBrazier(x, y, z, scale) {
   outer.position.y = 1.8 * scale;
   group.add(outer);
 
-  // Warm flickering point light
-  const light = new THREE.PointLight(0xff6622, 1.2 * scale, 22 * scale, 2);
-  light.position.y = 1.4 * scale;
-  group.add(light);
+  // Only the biggest braziers get a real dynamic light. Each extra PointLight
+  // multiplies fragment-shader cost on every MeshStandardMaterial in the scene,
+  // so we rely on emissive flame cones for the rest to keep the look without
+  // tanking framerate.
+  let light = null;
+  if (withLight) {
+    light = new THREE.PointLight(0xff6622, 1.5 * scale, 30 * scale, 2);
+    light.position.y = 1.4 * scale;
+    group.add(light);
+  }
 
   scene.add(group);
 
@@ -2197,7 +2216,7 @@ function updateFireFlames() {
     f.inner.rotation.y += 0.05;
     f.mid.rotation.y -= 0.04;
     f.outer.rotation.y += 0.025;
-    f.light.intensity = (0.9 + 0.5 * Math.sin(t * f.speed * 1.3 + f.phase)) * f.scale;
+    if (f.light) f.light.intensity = (1.1 + 0.5 * Math.sin(t * f.speed * 1.3 + f.phase)) * f.scale;
     f.coal.material.emissiveIntensity = 1.1 + 0.4 * Math.sin(t * f.speed * 0.8 + f.phase);
   }
 }
@@ -2245,6 +2264,8 @@ function updateConfetti() {
 // ============================================================
 // HUD
 // ============================================================
+let hudFrame = 0;
+let lastStatusHtml = '';
 function updateHUD() {
   const player = trucks[playerIndex];
   if (!player) return;
@@ -2263,7 +2284,11 @@ function updateHUD() {
   const mph = Math.round(speed * 150);
   document.getElementById('speedIndicator').textContent = mph + ' MPH';
 
-  const statusEl = document.getElementById('truckStatus');
+  // Truck status list only needs to refresh occasionally — building this string
+  // and re-parsing innerHTML for every truck every frame was a major DOM cost.
+  hudFrame = (hudFrame + 1) % 6;
+  if (hudFrame !== 0) return;
+
   let html = '';
   trucks.forEach((t, i) => {
     const hp = Math.max(0, t.health / MAX_HEALTH * 100);
@@ -2278,7 +2303,10 @@ function updateHUD() {
       <div class="truck-dot" style="background:${t.color}"></div>
     </div>`;
   });
-  statusEl.innerHTML = html;
+  if (html !== lastStatusHtml) {
+    document.getElementById('truckStatus').innerHTML = html;
+    lastStatusHtml = html;
+  }
 }
 
 // ============================================================
@@ -2411,6 +2439,7 @@ function gameLoop(time) {
 
   // UPDATE
   updateObstacles();
+  updateFans();
   updateSmoke();
   updateFireFlames();
   updateConfetti();
@@ -2438,9 +2467,11 @@ async function startGame() {
   }
   obstacles = [];
   ramps = [];
+  fans = [];
   smokeParticles = [];
   confettiParticles = [];
   fireFlames = [];
+  lastStatusHtml = '';
 
   if (!renderer) {
     renderer = new THREE.WebGLRenderer({ antialias: true });
