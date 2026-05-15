@@ -304,6 +304,13 @@ function createGLBCar(charIndex, index) {
   // Deep clone using SkeletonUtils-style clone to preserve materials & textures
   const model = deepCloneGLTF(template);
 
+  // Arvy's GLB has a different axis convention than the other Sketchfab models —
+  // its height axis ends up pointing sideways in world space, leaving the RV
+  // lying on its side. Rotate +90° around Z so the roof points up.
+  if (char.glb === 'arvy.glb') {
+    model.rotation.z = Math.PI / 2;
+  }
+
   // Compute bounding box to auto-scale
   const bbox = new THREE.Box3().setFromObject(model);
   const size = new THREE.Vector3();
