@@ -13,8 +13,15 @@ canvas { display: block; }
 #startScreen {
   position: fixed; inset: 0; z-index: 100;
   background: linear-gradient(135deg, #1a0a2e 0%, #16213e 50%, #0f3460 100%);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
   color: #fff;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+#startScreenInner {
+  min-height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 30px 20px 50px;
 }
 #startScreen h1 {
   font-size: clamp(1.8rem, 5vw, 3.5rem); font-weight: 900;
@@ -174,26 +181,28 @@ canvas { display: block; }
 
 <!-- START SCREEN -->
 <div id="startScreen">
-  <h1>Cars 3<br>Thunder Hollow<br>Demolition Derby</h1>
-  <h2>Smash. Crash. Be the Last One Standing.</h2>
+  <div id="startScreenInner">
+    <h1>Cars 3<br>Thunder Hollow<br>Demolition Derby</h1>
+    <h2>Smash. Crash. Be the Last One Standing.</h2>
 
-  <div class="section-label" id="pickLabel">Pick Your Character</div>
-  <div id="colorPicker"></div>
+    <div class="section-label" id="pickLabel">Pick Your Character</div>
+    <div id="colorPicker"></div>
 
-  <div class="section-label">Difficulty</div>
-  <div id="difficultyPicker">
-    <button class="diff-btn" data-diff="easy">Easy</button>
-    <button class="diff-btn selected" data-diff="medium">Medium</button>
-    <button class="diff-btn" data-diff="hard">Hard</button>
-  </div>
+    <div class="section-label">Difficulty</div>
+    <div id="difficultyPicker">
+      <button class="diff-btn" data-diff="easy">Easy</button>
+      <button class="diff-btn selected" data-diff="medium">Medium</button>
+      <button class="diff-btn" data-diff="hard">Hard</button>
+    </div>
 
-  <button id="startBtn">START</button>
+    <button id="startBtn">START</button>
 
-  <div id="controlsInfo">
-    <span>↑↓←→</span> Drive &amp; Steer &nbsp;|&nbsp;
-    <span>SPACE</span> Jump &nbsp;|&nbsp;
-    <span>ENTER</span> Boost (x3) &nbsp;|&nbsp;
-    Last one alive wins!
+    <div id="controlsInfo">
+      <span>↑↓←→</span> Drive &amp; Steer &nbsp;|&nbsp;
+      <span>SPACE</span> Jump &nbsp;|&nbsp;
+      <span>ENTER</span> Boost (x3) &nbsp;|&nbsp;
+      Last one alive wins!
+    </div>
   </div>
 </div>
 
