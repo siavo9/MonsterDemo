@@ -91,6 +91,16 @@ canvas { display: block; }
 }
 #controlsInfo span { color: #f7c948; font-weight: 600; }
 
+/* MORE GAMES LINK */
+#moreGames {
+  margin-top: 20px; font-size: 0.9rem; color: #aaa; text-align: center;
+}
+#moreGames a {
+  color: #f7c948; font-weight: 700; text-decoration: none;
+  border-bottom: 1px solid rgba(247,201,72,0.4); transition: all 0.2s;
+}
+#moreGames a:hover { color: #ff6b35; border-bottom-color: #ff6b35; }
+
 /* HUD */
 #hud {
   position: fixed; top: 0; left: 0; right: 0; z-index: 50;
@@ -193,6 +203,10 @@ canvas { display: block; }
       <span>SPACE</span> Jump &nbsp;|&nbsp;
       <span>ENTER</span> Boost (x3) &nbsp;|&nbsp;
       Last one alive wins!
+    </div>
+
+    <div id="moreGames">
+      Try more fun brain games at <a href="https://zaksbraingames.com/" target="_blank" rel="noopener noreferrer">zaksbraingames.com</a>
     </div>
   </div>
 </div>
