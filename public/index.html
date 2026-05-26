@@ -198,8 +198,7 @@ canvas { display: block; }
 
     <div class="section-label">Difficulty</div>
     <div id="difficultyPicker">
-      <button class="diff-btn" data-diff="easy">Easy</button>
-      <button class="diff-btn selected" data-diff="medium">Medium</button>
+      <button class="diff-btn selected" data-diff="easy">Easy</button>
       <button class="diff-btn" data-diff="hard">Hard</button>
     </div>
 
@@ -385,7 +384,7 @@ const HIT_SELF_DAMAGE_RATIO = 0.15;
 // --- GAME STATE ---
 let scene, camera, renderer;
 let playerIndex = 0;
-let difficulty = 'medium';
+let difficulty = 'easy';
 let trucks = [];
 let obstacles = [];
 let ramps = [];
@@ -2088,21 +2087,6 @@ function updateAI(t, dt) {
         t.aiTargetAngle = t.rotationY + (Math.random() - 0.5) * 1.5;
       }
       t.aiAccel = Math.random() < 0.7;
-    } else if (difficulty === 'medium') {
-      t.aiTimer = 0.8 + Math.random() * 1.2;
-      let nearest = null, nearDist = Infinity;
-      aliveTrucks.forEach(tr => {
-        const d = Math.hypot(tr.mesh.position.x - t.mesh.position.x, tr.mesh.position.z - t.mesh.position.z);
-        if (d < nearDist) { nearDist = d; nearest = tr; }
-      });
-      if (nearest) {
-        t.aiTargetAngle = Math.atan2(
-          nearest.mesh.position.x - t.mesh.position.x,
-          nearest.mesh.position.z - t.mesh.position.z
-        );
-        t.aiTargetAngle += (Math.random() - 0.5) * 0.4;
-      }
-      t.aiAccel = true;
     } else {
       t.aiTimer = 0.5 + Math.random() * 0.8;
       let weakest = null, minHp = Infinity;
@@ -2138,7 +2122,7 @@ function updateAI(t, dt) {
   t.rotationY += turnAmt;
 
   if (t.aiAccel) {
-    const maxSpd = difficulty === 'easy' ? MAX_SPEED * 0.55 : difficulty === 'medium' ? MAX_SPEED * 0.75 : MAX_SPEED * 0.9;
+    const maxSpd = difficulty === 'easy' ? MAX_SPEED * 0.55 : MAX_SPEED * 0.9;
     t.speed = Math.min(t.speed + ACCELERATION * 0.8, maxSpd);
   } else {
     t.speed *= 0.98;
