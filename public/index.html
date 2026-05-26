@@ -156,8 +156,15 @@ canvas { display: block; }
   display: none; flex-direction: column; align-items: center; justify-content: center;
   color: #fff;
 }
-#endScreen h1 { font-size: 3rem; margin-bottom: 15px; }
-#endScreen p { font-size: 1.3rem; color: #ccc; margin-bottom: 30px; }
+#endScreen h1 { font-size: 3rem; margin-bottom: 15px; text-align: center; }
+#endScreen p { font-size: 1.3rem; color: #ccc; margin-bottom: 30px; text-align: center; max-width: 90%; }
+#winnerStage {
+  margin-bottom: 18px;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+}
+#winnerStage canvas { display: block; }
 #restartBtn {
   padding: 14px 50px; font-size: 1.2rem; font-weight: 700;
   border: none; border-radius: 50px; cursor: pointer;
@@ -224,6 +231,7 @@ canvas { display: block; }
 
 <!-- END SCREEN -->
 <div id="endScreen">
+  <div id="winnerStage"></div>
   <h1 id="endTitle"></h1>
   <p id="endMessage"></p>
   <button id="restartBtn">PLAY AGAIN</button>
@@ -693,6 +701,7 @@ buildColorPicker();
 // --- START / RESTART ---
 document.getElementById('startBtn').onclick = startGame;
 document.getElementById('restartBtn').onclick = () => {
+  stopWinnerCelebration();
   document.getElementById('endScreen').style.display = 'none';
   document.getElementById('startScreen').style.display = 'flex';
 };
@@ -2471,7 +2480,12 @@ function gameLoop(time) {
   // WIN/LOSE CHECK
   const aliveTrucks = trucks.filter(t => t.alive);
   if (aliveTrucks.length <= 1) {
-    endGame(aliveTrucks.length === 1 && aliveTrucks[0].index === playerIndex);
+    // Winner is the last car alive, or the last one eliminated if they all
+    // went down on the same frame.
+    const winnerIndex = aliveTrucks.length === 1
+      ? aliveTrucks[0].index
+      : eliminationOrder[eliminationOrder.length - 1];
+    endGame(winnerIndex === playerIndex, winnerIndex);
   }
 
   renderer.render(scene, camera);
@@ -2482,6 +2496,7 @@ function gameLoop(time) {
 // ============================================================
 async function startGame() {
   initAudio();
+  stopWinnerCelebration();
 
   if (scene) {
     while (scene.children.length > 0) scene.remove(scene.children[0]);
@@ -2554,7 +2569,181 @@ async function startGame() {
   countdownRender();
 }
 
-function endGame(won) {
+// ============================================================
+// WINNER CELEBRATION STAGE (end screen)
+// Shows the winning car celebrating, reusing its own GLB model.
+// ============================================================
+let celebRenderer, celebScene, celebCamera, celebCarGroup, celebWheels = [];
+let celebAnimId = null, celebClock, celebConfetti = [];
+
+function celebStageSize() {
+  return Math.round(Math.min(window.innerWidth * 0.72, window.innerHeight * 0.42, 360));
+}
+
+function initCelebrationStage() {
+  if (celebRenderer) return;
+  const stage = document.getElementById('winnerStage');
+  const size = celebStageSize();
+
+  celebRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  celebRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  celebRenderer.setSize(size, size);
+  stage.appendChild(celebRenderer.domElement);
+
+  celebScene = new THREE.Scene();
+  celebScene.background = new THREE.Color(0x12081f);
+
+  celebCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  celebCamera.position.set(0, 2.4, 6.5);
+  celebCamera.lookAt(0, 1.0, 0);
+
+  celebScene.add(new THREE.AmbientLight(0xffeedd, 0.6));
+  const key = new THREE.DirectionalLight(0xfff2d0, 1.0);
+  key.position.set(4, 8, 6);
+  celebScene.add(key);
+  const rim = new THREE.SpotLight(0xf7c948, 1.2, 40, 0.7, 0.6);
+  rim.position.set(-5, 7, -3);
+  rim.target.position.set(0, 1, 0);
+  celebScene.add(rim); celebScene.add(rim.target);
+  const fill = new THREE.PointLight(0xff8844, 0.6, 30);
+  fill.position.set(0, 1.5, 6);
+  celebScene.add(fill);
+
+  // Winner's podium
+  const podium = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.4, 2.7, 0.6, 32),
+    new THREE.MeshStandardMaterial({ color: 0x3a2a55, roughness: 0.7, metalness: 0.3 })
+  );
+  podium.position.y = -0.3;
+  celebScene.add(podium);
+  const podiumTop = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.4, 2.4, 0.08, 32),
+    new THREE.MeshStandardMaterial({ color: 0xf7c948, emissive: 0xf7c948, emissiveIntensity: 0.4 })
+  );
+  podiumTop.position.y = 0.04;
+  celebScene.add(podiumTop);
+
+  celebClock = new THREE.Clock();
+}
+
+// Build a centered, ground-resting clone of a character's GLB for display.
+function buildCelebrationModel(charIndex) {
+  const char = CARS2_CHARACTERS[charIndex];
+  const template = glbModelCache[char.glb];
+  const group = new THREE.Group();
+  celebWheels = [];
+
+  if (!template) {
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(2, 1, 3.4),
+      new THREE.MeshStandardMaterial({ color: char.color })
+    );
+    box.position.y = 0.5;
+    group.add(box);
+    return group;
+  }
+
+  const model = deepCloneGLTF(template);
+  if (char.glb === 'arvy.glb') model.rotation.z = Math.PI / 2;
+
+  const bbox = new THREE.Box3().setFromObject(model);
+  const size = new THREE.Vector3();
+  bbox.getSize(size);
+  const maxDim = Math.max(size.x, size.y, size.z);
+  model.scale.multiplyScalar(3.0 / maxDim);
+
+  const bbox2 = new THREE.Box3().setFromObject(model);
+  const center = new THREE.Vector3();
+  bbox2.getCenter(center);
+  model.position.set(-center.x, -bbox2.min.y, -center.z);
+
+  model.traverse(child => {
+    if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
+    if (child.name && child.name.toLowerCase().includes('wheel')) celebWheels.push(child);
+  });
+
+  group.add(model);
+  return group;
+}
+
+function spawnCelebConfetti() {
+  const colors = [0xff6b35, 0xf7c948, 0x3498db, 0x2ecc71, 0xe74c3c, 0xff69b4];
+  for (let i = 0; i < 90; i++) {
+    const p = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 0.16, 0.03),
+      new THREE.MeshBasicMaterial({ color: colors[i % colors.length] })
+    );
+    p.position.set((Math.random() - 0.5) * 7, 3 + Math.random() * 4, (Math.random() - 0.5) * 4);
+    p.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+    celebScene.add(p);
+    celebConfetti.push({
+      mesh: p,
+      vy: -0.012 - Math.random() * 0.025,
+      vx: (Math.random() - 0.5) * 0.01,
+      vr: (Math.random() - 0.5) * 0.25
+    });
+  }
+}
+
+function showWinnerCelebration(charIndex) {
+  initCelebrationStage();
+
+  if (celebCarGroup) {
+    celebScene.remove(celebCarGroup);
+    celebCarGroup = null;
+  }
+  celebConfetti.forEach(c => celebScene.remove(c.mesh));
+  celebConfetti = [];
+
+  celebCarGroup = buildCelebrationModel(charIndex);
+  celebScene.add(celebCarGroup);
+  spawnCelebConfetti();
+
+  if (celebAnimId === null) {
+    celebClock.start();
+    celebAnimate();
+  }
+}
+
+function celebAnimate() {
+  celebAnimId = requestAnimationFrame(celebAnimate);
+  const t = celebClock.getElapsedTime();
+
+  if (celebCarGroup) {
+    // Slow turntable spin so the whole car is on show
+    celebCarGroup.rotation.y += 0.018;
+    // Excited little victory hop
+    celebCarGroup.position.y = Math.abs(Math.sin(t * 4.2)) * 0.55;
+    // Happy side-to-side rock
+    celebCarGroup.rotation.z = Math.sin(t * 6.5) * 0.07;
+    // Spin the wheels in celebration
+    for (const w of celebWheels) w.rotation.x += 0.25;
+  }
+
+  // Confetti rain
+  for (let i = celebConfetti.length - 1; i >= 0; i--) {
+    const c = celebConfetti[i];
+    c.mesh.position.y += c.vy;
+    c.mesh.position.x += c.vx;
+    c.mesh.rotation.x += c.vr;
+    c.mesh.rotation.z += c.vr * 0.6;
+    if (c.mesh.position.y < -0.4) {
+      c.mesh.position.y = 4 + Math.random() * 2;
+      c.mesh.position.x = (Math.random() - 0.5) * 7;
+    }
+  }
+
+  celebRenderer.render(celebScene, celebCamera);
+}
+
+function stopWinnerCelebration() {
+  if (celebAnimId !== null) {
+    cancelAnimationFrame(celebAnimId);
+    celebAnimId = null;
+  }
+}
+
+function endGame(won, winnerIndex) {
   gameRunning = false;
   stopEngineSound();
   stopCrowdAmbient();
@@ -2562,13 +2751,18 @@ function endGame(won) {
 
   const totalCount = trucks.length;
   const vehicleWord = 'car';
+  const playerCarName = CARS2_CHARACTERS[playerIndex].name;
+
+  // Show the winning car celebrating on its own GLB model.
+  showWinnerCelebration(winnerIndex);
 
   if (won) {
     playSound('victory');
     spawnConfetti();
     document.getElementById('endTitle').textContent = '🏆 YOU WIN! 🏆';
     document.getElementById('endTitle').style.color = '#f7c948';
-    document.getElementById('endMessage').textContent = `You are the last ${vehicleWord} standing!`;
+    document.getElementById('endMessage').textContent =
+      `Congratulations! Your ${playerCarName} is the last ${vehicleWord} standing!`;
 
     function victoryLoop() {
       updateConfetti();
@@ -2579,11 +2773,13 @@ function endGame(won) {
     }
     requestAnimationFrame(victoryLoop);
   } else {
+    const winnerName = CARS2_CHARACTERS[winnerIndex].name;
     const position = totalCount - eliminationOrder.indexOf(playerIndex);
     const suffix = position === 1 ? 'st' : position === 2 ? 'nd' : position === 3 ? 'rd' : 'th';
     document.getElementById('endTitle').textContent = 'GAME OVER';
     document.getElementById('endTitle').style.color = '#e74c3c';
-    document.getElementById('endMessage').textContent = `You finished ${position}${suffix} out of ${totalCount}!`;
+    document.getElementById('endMessage').textContent =
+      `${winnerName} won the derby! You finished ${position}${suffix} out of ${totalCount}.`;
   }
 
   setTimeout(() => {
@@ -2593,10 +2789,15 @@ function endGame(won) {
 
 // --- RESIZE ---
 window.addEventListener('resize', () => {
-  if (!camera || !renderer) return;
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  if (camera && renderer) {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+  if (celebRenderer) {
+    const s = celebStageSize();
+    celebRenderer.setSize(s, s);
+  }
 });
 
 </script>
