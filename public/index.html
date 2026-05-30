@@ -712,7 +712,10 @@ document.getElementById('startBtn').onclick = startGame;
 document.getElementById('restartBtn').onclick = () => {
   stopWinnerCelebration();
   document.getElementById('endScreen').style.display = 'none';
-  document.getElementById('startScreen').style.display = 'flex';
+  // Restore as 'block' (its default) — the inner #startScreenInner handles the
+  // flex centering. Using 'flex' here makes #startScreen a row flexbox and
+  // left-aligns the menu, pushing it off-center after a round.
+  document.getElementById('startScreen').style.display = 'block';
 };
 
 // --- KEYBOARD ---
