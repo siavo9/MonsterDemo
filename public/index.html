@@ -209,6 +209,11 @@ canvas { display: block; }
       <span>SPACE</span> Jump &nbsp;|&nbsp;
       <span>ENTER</span> Boost (x3) &nbsp;|&nbsp;
       Last one alive wins!
+      <br>
+      🎮 <span>PS5:</span> Left stick / D-pad Drive &nbsp;|&nbsp;
+      <span>Right stick</span> View &nbsp;|&nbsp;
+      <span>X</span> Jump &nbsp;|&nbsp;
+      <span>R2</span> Boost
     </div>
 
     <div id="moreGames">
@@ -391,6 +396,11 @@ let ramps = [];
 let fans = [];
 let gameRunning = false;
 let keys = {};
+// --- GAMEPAD (PS5 DualSense via Bluetooth, W3C Standard Gamepad mapping) ---
+const gamepad = { throttle: 0, steer: 0, jumpEdge: false, boostEdge: false, rsX: 0, rsY: 0 };
+const gamepadPrevButtons = {};   // edge-detection state, keyed by button index
+let camYawOffset = 0;            // right-stick horizontal view orbit
+let camPitchOffset = 0;          // right-stick vertical view orbit
 let boostsLeft = 3;
 let eliminationOrder = [];
 let confettiParticles = [];
@@ -711,6 +721,100 @@ window.addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// --- GAMEPAD (PS5 DualSense over Bluetooth) ---
+// Uses the standard W3C Gamepad mapping that Chrome/Edge/Safari expose for the
+// DualSense. Layout we care about:
+//   axes[0]/axes[1]  = left stick  X / Y   -> drive + steer
+//   axes[2]/axes[3]  = right stick X / Y   -> change the camera view
+//   buttons[0]       = Cross (X)           -> jump
+//   buttons[7]/[5]   = R2 / R1             -> boost
+//   buttons[12..15]  = D-pad up/down/left/right -> drive
+function gamepadDeadzone(v, dz = 0.18) {
+  if (Math.abs(v) < dz) return 0;
+  return (v - Math.sign(v) * dz) / (1 - dz);
+}
+function gamepadButtonPressed(gp, i) {
+  const b = gp.buttons[i];
+  return !!b && (b.pressed || b.value > 0.5);
+}
+function gamepadButtonEdge(gp, i) {
+  const pressed = gamepadButtonPressed(gp, i);
+  const was = gamepadPrevButtons[i] || false;
+  gamepadPrevButtons[i] = pressed;
+  return pressed && !was;
+}
+function getActiveGamepad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (const p of pads) {
+    if (p && p.connected) return p;
+  }
+  return null;
+}
+function pollGamepad() {
+  // Reset per-frame intents.
+  gamepad.throttle = 0;
+  gamepad.steer = 0;
+  gamepad.jumpEdge = false;
+  gamepad.boostEdge = false;
+  gamepad.rsX = 0;
+  gamepad.rsY = 0;
+
+  const gp = getActiveGamepad();
+  if (!gp) return;
+
+  // --- Left stick: drive (up = forward) + steer ---
+  const lx = gamepadDeadzone(gp.axes[0] || 0);
+  const ly = gamepadDeadzone(gp.axes[1] || 0);
+  let throttle = -ly;          // push up -> accelerate, pull down -> brake/reverse
+  let steer = -lx;             // push left -> turn left (matches ArrowLeft), right -> right
+
+  // --- D-pad: digital driving overrides analog when held ---
+  if (gamepadButtonPressed(gp, 12)) throttle = 1;   // up
+  if (gamepadButtonPressed(gp, 13)) throttle = -1;  // down
+  if (gamepadButtonPressed(gp, 14)) steer = 1;      // left
+  if (gamepadButtonPressed(gp, 15)) steer = -1;     // right
+
+  gamepad.throttle = Math.max(-1, Math.min(1, throttle));
+  gamepad.steer = Math.max(-1, Math.min(1, steer));
+
+  // --- Right stick: change the camera view ---
+  gamepad.rsX = gamepadDeadzone(gp.axes[2] || 0);
+  gamepad.rsY = gamepadDeadzone(gp.axes[3] || 0);
+  camYawOffset += gamepad.rsX * 0.05;
+  camPitchOffset += -gamepad.rsY * 0.12;
+  camPitchOffset = Math.max(-3, Math.min(9, camPitchOffset));
+  // Smoothly recenter the view when the stick is released.
+  if (gamepad.rsX === 0) camYawOffset *= 0.88;
+  if (gamepad.rsY === 0) camPitchOffset *= 0.88;
+
+  // --- Buttons ---
+  gamepad.jumpEdge = gamepadButtonEdge(gp, 0);                          // X / Cross
+  gamepad.boostEdge = gamepadButtonEdge(gp, 7) || gamepadButtonEdge(gp, 5); // R2 / R1
+}
+
+window.addEventListener('gamepadconnected', e => {
+  showGamepadToast('🎮 ' + (e.gamepad.id || 'Controller') + ' connected');
+});
+window.addEventListener('gamepaddisconnected', () => {
+  showGamepadToast('🎮 Controller disconnected');
+});
+function showGamepadToast(msg) {
+  let el = document.getElementById('gamepadToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'gamepadToast';
+    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);' +
+      'background:rgba(0,0,0,0.8);color:#fff;padding:10px 18px;border-radius:8px;' +
+      'font-family:sans-serif;font-size:15px;z-index:9999;pointer-events:none;' +
+      'transition:opacity 0.4s;opacity:0;border:1px solid rgba(255,255,255,0.2);';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => { el.style.opacity = '0'; }, 2500);
+}
 
 // ============================================================
 // BUILD THUNDER HOLLOW SCENE
@@ -1889,9 +1993,11 @@ function updateCamera() {
   if (!player) return;
   const dist = 12;
   const height = 7;
-  const targetX = player.mesh.position.x - Math.sin(player.rotationY) * dist;
-  const targetZ = player.mesh.position.z - Math.cos(player.rotationY) * dist;
-  const targetY = player.mesh.position.y + height;
+  // Right-stick view offsets orbit the camera around the truck.
+  const viewAngle = player.rotationY + camYawOffset;
+  const targetX = player.mesh.position.x - Math.sin(viewAngle) * dist;
+  const targetZ = player.mesh.position.z - Math.cos(viewAngle) * dist;
+  const targetY = player.mesh.position.y + height + camPitchOffset;
   camera.position.x += (targetX - camera.position.x) * 0.08;
   camera.position.y += (targetY - camera.position.y) * 0.08;
   camera.position.z += (targetZ - camera.position.z) * 0.08;
@@ -2338,24 +2444,40 @@ function gameLoop(time) {
 
   // PLAYER INPUT
   if (player.alive) {
-    if (keys['ArrowUp']) {
-      player.speed = Math.min(player.speed + ACCELERATION, MAX_SPEED);
-    }
-    if (keys['ArrowDown']) {
+    // Read PS5 controller state for this frame.
+    pollGamepad();
+
+    // Merge keyboard + gamepad into signed intents in [-1, 1].
+    // throttle: +1 = accelerate, -1 = brake/reverse.  steer: +1 = left, -1 = right.
+    let throttle = 0;
+    if (keys['ArrowUp']) throttle = 1;
+    else if (keys['ArrowDown']) throttle = -1;
+    if (Math.abs(gamepad.throttle) > 0.001) throttle = gamepad.throttle;
+
+    let steer = 0;
+    if (keys['ArrowLeft']) steer = 1;
+    else if (keys['ArrowRight']) steer = -1;
+    if (Math.abs(gamepad.steer) > 0.001) steer = gamepad.steer;
+
+    if (throttle > 0.05) {
+      player.speed = Math.min(player.speed + ACCELERATION * throttle, MAX_SPEED);
+    } else if (throttle < -0.05) {
+      const amt = -throttle; // 0..1
       if (player.speed > 0) {
-        player.speed -= BRAKE_FORCE;
+        player.speed -= BRAKE_FORCE * amt;
         if (player.speed < 0) player.speed = 0;
       } else {
-        player.speed = Math.max(player.speed - ACCELERATION * 0.6, -REVERSE_MAX);
+        player.speed = Math.max(player.speed - ACCELERATION * 0.6 * amt, -REVERSE_MAX);
       }
-    }
-    if (!keys['ArrowUp'] && !keys['ArrowDown']) {
+    } else {
       player.speed *= FRICTION;
     }
-    if (keys['ArrowLeft']) player.rotationY += TURN_SPEED * (player.speed > 0 ? 1 : player.speed < 0 ? -1 : 0);
-    if (keys['ArrowRight']) player.rotationY -= TURN_SPEED * (player.speed > 0 ? 1 : player.speed < 0 ? -1 : 0);
 
-    if (keys['Space'] && player.onGround && player.jumpCooldown <= 0) {
+    if (Math.abs(steer) > 0.05) {
+      player.rotationY += TURN_SPEED * steer * (player.speed > 0 ? 1 : player.speed < 0 ? -1 : 0);
+    }
+
+    if ((keys['Space'] || gamepad.jumpEdge) && player.onGround && player.jumpCooldown <= 0) {
       player.vy = JUMP_FORCE;
       player.onGround = false;
       player.jumpCooldown = 25;
@@ -2363,7 +2485,7 @@ function gameLoop(time) {
     }
     if (player.jumpCooldown > 0) player.jumpCooldown--;
 
-    if (keys['Enter'] && boostsLeft > 0 && !player.boosting) {
+    if ((keys['Enter'] || gamepad.boostEdge) && boostsLeft > 0 && !player.boosting) {
       player.boosting = true;
       player.boostTimer = 25;
       boostsLeft--;
