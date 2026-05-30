@@ -2557,12 +2557,39 @@ async function startGame() {
 // WINNER CELEBRATION STAGE (end screen)
 // Shows the winning car celebrating, reusing its own GLB model.
 // ============================================================
-let celebRenderer, celebScene, celebCamera, celebCarGroup, celebWheels = [];
+let celebRenderer, celebScene, celebCamera, celebCars = [];
 let celebAnimId = null, celebClock, celebConfetti = [];
 
+// The podium stage is a wide row of three cars, so it's landscape, not square.
 function celebStageSize() {
-  return Math.round(Math.min(window.innerWidth * 0.72, window.innerHeight * 0.42, 360));
+  const w = Math.round(Math.min(window.innerWidth * 0.92, 640));
+  return { w, h: Math.round(w * 0.5) };
 }
+
+// Floating "1 / 2 / 3" rank label that always faces the camera.
+function makeRankSprite(text, color) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.font = 'bold 96px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 8;
+  ctx.fillText(text, 64, 70);
+  const tex = new THREE.CanvasTexture(c);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sprite.scale.set(0.9, 0.9, 0.9);
+  return sprite;
+}
+
+// Podium slots, ordered by finishing place. 1st sits centre/tallest/biggest.
+const PODIUM_SLOTS = [
+  { x: 0,    top: 1.15, radius: 1.55, scale: 3.0, color: 0xf7c948, hop: 0.45, label: '1' }, // gold
+  { x: -3.3, top: 0.65, radius: 1.35, scale: 2.1, color: 0xc8ccd4, hop: 0.16, label: '2' }, // silver
+  { x: 3.3,  top: 0.4,  radius: 1.35, scale: 2.1, color: 0xcd7f32, hop: 0.16, label: '3' }  // bronze
+];
 
 function initCelebrationStage() {
   if (celebRenderer) return;
@@ -2571,15 +2598,15 @@ function initCelebrationStage() {
 
   celebRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   celebRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  celebRenderer.setSize(size, size);
+  celebRenderer.setSize(size.w, size.h);
   stage.appendChild(celebRenderer.domElement);
 
   celebScene = new THREE.Scene();
   celebScene.background = new THREE.Color(0x12081f);
 
-  celebCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  celebCamera.position.set(0, 2.4, 6.5);
-  celebCamera.lookAt(0, 1.0, 0);
+  celebCamera = new THREE.PerspectiveCamera(46, size.w / size.h, 0.1, 100);
+  celebCamera.position.set(0, 3.2, 8.6);
+  celebCamera.lookAt(0, 1.35, 0);
 
   celebScene.add(new THREE.AmbientLight(0xffeedd, 0.6));
   const key = new THREE.DirectionalLight(0xfff2d0, 1.0);
@@ -2593,36 +2620,60 @@ function initCelebrationStage() {
   fill.position.set(0, 1.5, 6);
   celebScene.add(fill);
 
-  // Winner's podium
-  const podium = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.4, 2.7, 0.6, 32),
-    new THREE.MeshStandardMaterial({ color: 0x3a2a55, roughness: 0.7, metalness: 0.3 })
+  // A bright winner spotlight to make 1st place pop.
+  const winnerSpot = new THREE.SpotLight(0xffffff, 1.8, 30, 0.5, 0.5);
+  winnerSpot.position.set(0, 9, 4);
+  winnerSpot.target.position.set(0, 1.6, 0);
+  celebScene.add(winnerSpot); celebScene.add(winnerSpot.target);
+
+  // Three pedestals (gold / silver / bronze) at descending heights.
+  for (const slot of PODIUM_SLOTS) {
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(slot.radius, slot.radius * 1.08, slot.top, 32),
+      new THREE.MeshStandardMaterial({ color: 0x3a2a55, roughness: 0.7, metalness: 0.3 })
+    );
+    base.position.set(slot.x, slot.top / 2, 0);
+    celebScene.add(base);
+
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(slot.radius, slot.radius, 0.08, 32),
+      new THREE.MeshStandardMaterial({ color: slot.color, emissive: slot.color, emissiveIntensity: 0.4 })
+    );
+    cap.position.set(slot.x, slot.top + 0.04, 0);
+    celebScene.add(cap);
+
+    const rank = makeRankSprite(slot.label, slot.label === '1' ? '#fff2c0' : '#ffffff');
+    rank.position.set(slot.x, slot.top * 0.5, slot.radius + 0.05);
+    rank.scale.set(slot.top * 0.7, slot.top * 0.7, 1);
+    celebScene.add(rank);
+  }
+
+  // Glowing ring that haloes the winner.
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(PODIUM_SLOTS[0].radius * 0.95, 0.06, 16, 48),
+    new THREE.MeshBasicMaterial({ color: 0xf7c948 })
   );
-  podium.position.y = -0.3;
-  celebScene.add(podium);
-  const podiumTop = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.4, 2.4, 0.08, 32),
-    new THREE.MeshStandardMaterial({ color: 0xf7c948, emissive: 0xf7c948, emissiveIntensity: 0.4 })
-  );
-  podiumTop.position.y = 0.04;
-  celebScene.add(podiumTop);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(0, PODIUM_SLOTS[0].top + 0.09, 0);
+  celebScene.add(ring);
 
   celebClock = new THREE.Clock();
 }
 
+
 // Build a centered, ground-resting clone of a character's GLB for display.
-function buildCelebrationModel(charIndex) {
+function buildCelebrationModel(charIndex, targetSize) {
   const char = CARS2_CHARACTERS[charIndex];
   const template = glbModelCache[char.glb];
   const group = new THREE.Group();
-  celebWheels = [];
 
   if (!template) {
+    const s = targetSize / 3.4;
     const box = new THREE.Mesh(
-      new THREE.BoxGeometry(2, 1, 3.4),
+      new THREE.BoxGeometry(2 * s, 1 * s, 3.4 * s),
       new THREE.MeshStandardMaterial({ color: char.color })
     );
-    box.position.y = 0.5;
+    box.position.y = 0.5 * s;
     group.add(box);
     return group;
   }
@@ -2634,16 +2685,17 @@ function buildCelebrationModel(charIndex) {
   const size = new THREE.Vector3();
   bbox.getSize(size);
   const maxDim = Math.max(size.x, size.y, size.z);
-  model.scale.multiplyScalar(3.0 / maxDim);
+  model.scale.multiplyScalar(targetSize / maxDim);
 
   const bbox2 = new THREE.Box3().setFromObject(model);
   const center = new THREE.Vector3();
   bbox2.getCenter(center);
   model.position.set(-center.x, -bbox2.min.y, -center.z);
 
+  // Keep the whole model (tyres included) intact — no per-wheel spinning, which
+  // used to swing combined wheel meshes off-axis and make the tyres disappear.
   model.traverse(child => {
     if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
-    if (child.name && child.name.toLowerCase().includes('wheel')) celebWheels.push(child);
   });
 
   group.add(model);
@@ -2669,18 +2721,25 @@ function spawnCelebConfetti() {
   }
 }
 
-function showWinnerCelebration(charIndex) {
+// rankIndices: character indices ordered 1st, 2nd, 3rd.
+function showWinnerCelebration(rankIndices) {
   initCelebrationStage();
 
-  if (celebCarGroup) {
-    celebScene.remove(celebCarGroup);
-    celebCarGroup = null;
-  }
+  celebCars.forEach(car => celebScene.remove(car.group));
+  celebCars = [];
   celebConfetti.forEach(c => celebScene.remove(c.mesh));
   celebConfetti = [];
 
-  celebCarGroup = buildCelebrationModel(charIndex);
-  celebScene.add(celebCarGroup);
+  for (let i = 0; i < PODIUM_SLOTS.length; i++) {
+    const charIndex = rankIndices[i];
+    if (charIndex === undefined || charIndex === null) continue; // fewer than 3 racers
+    const slot = PODIUM_SLOTS[i];
+    const group = buildCelebrationModel(charIndex, slot.scale);
+    group.position.set(slot.x, slot.top + 0.08, 0);
+    celebScene.add(group);
+    celebCars.push({ group, slot, baseY: slot.top + 0.08, isWinner: i === 0 });
+  }
+
   spawnCelebConfetti();
 
   if (celebAnimId === null) {
@@ -2693,15 +2752,13 @@ function celebAnimate() {
   celebAnimId = requestAnimationFrame(celebAnimate);
   const t = celebClock.getElapsedTime();
 
-  if (celebCarGroup) {
+  for (const car of celebCars) {
     // Slow turntable spin so the whole car is on show
-    celebCarGroup.rotation.y += 0.018;
-    // Excited little victory hop
-    celebCarGroup.position.y = Math.abs(Math.sin(t * 4.2)) * 0.55;
+    car.group.rotation.y += car.isWinner ? 0.018 : 0.012;
+    // Victory hop — bigger for the champ
+    car.group.position.y = car.baseY + Math.abs(Math.sin(t * 4.2)) * car.slot.hop;
     // Happy side-to-side rock
-    celebCarGroup.rotation.z = Math.sin(t * 6.5) * 0.07;
-    // Spin the wheels in celebration
-    for (const w of celebWheels) w.rotation.x += 0.25;
+    car.group.rotation.z = Math.sin(t * 6.5) * (car.isWinner ? 0.07 : 0.04);
   }
 
   // Confetti rain
@@ -2737,8 +2794,15 @@ function endGame(won, winnerIndex) {
   const vehicleWord = 'car';
   const playerCarName = CARS2_CHARACTERS[playerIndex].name;
 
-  // Show the winning car celebrating on its own GLB model.
-  showWinnerCelebration(winnerIndex);
+  // Final standings: winner first, then the cars in reverse elimination order
+  // (the last car knocked out placed 2nd, and so on).
+  const ranking = [winnerIndex];
+  for (let i = eliminationOrder.length - 1; i >= 0 && ranking.length < totalCount; i--) {
+    if (eliminationOrder[i] !== winnerIndex) ranking.push(eliminationOrder[i]);
+  }
+
+  // Show the top three cars on the podium, winner largest and highlighted.
+  showWinnerCelebration(ranking.slice(0, 3));
 
   if (won) {
     playSound('victory');
@@ -2780,7 +2844,9 @@ window.addEventListener('resize', () => {
   }
   if (celebRenderer) {
     const s = celebStageSize();
-    celebRenderer.setSize(s, s);
+    celebRenderer.setSize(s.w, s.h);
+    celebCamera.aspect = s.w / s.h;
+    celebCamera.updateProjectionMatrix();
   }
 });
 
