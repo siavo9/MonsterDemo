@@ -174,6 +174,44 @@ canvas { display: block; }
 }
 #restartBtn:hover { transform: scale(1.05); }
 
+/* PAUSE BUTTON (visible while playing) */
+#pauseBtn {
+  position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
+  z-index: 60; display: none;
+  width: 46px; height: 46px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.35);
+  background: rgba(0,0,0,0.55); color: #fff;
+  font-size: 1.1rem; cursor: pointer; line-height: 1;
+  transition: all 0.2s; pointer-events: auto;
+}
+#pauseBtn:hover { background: rgba(0,0,0,0.8); border-color: #f7c948; color: #f7c948; transform: translateX(-50%) scale(1.08); }
+
+/* PAUSE MENU */
+#pauseMenu {
+  position: fixed; inset: 0; z-index: 110;
+  background: rgba(0,0,0,0.8);
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  color: #fff;
+}
+#pauseMenu h1 {
+  font-size: 3rem; margin-bottom: 30px; text-align: center;
+  letter-spacing: 4px; text-transform: uppercase;
+  text-shadow: 0 0 30px rgba(247,201,72,0.5);
+}
+.pause-btn {
+  width: 280px; margin: 8px 0; padding: 14px 30px;
+  font-size: 1.15rem; font-weight: 700; cursor: pointer;
+  border: none; border-radius: 50px; letter-spacing: 1px; text-transform: uppercase;
+  transition: all 0.2s;
+}
+.pause-btn:hover { transform: scale(1.05); }
+.pause-btn.primary { background: linear-gradient(135deg, #2ecc71, #27ae60); color: #fff; }
+.pause-btn.secondary { background: linear-gradient(135deg, #f7c948, #ff6b35); color: #1a0a2e; }
+.pause-btn.tertiary { background: transparent; color: #ccc; border: 2px solid #666; }
+.pause-btn.tertiary:hover { border-color: #f7c948; color: #f7c948; }
+#pauseHint { margin-top: 22px; font-size: 0.85rem; color: #888; }
+#pauseHint span { color: #f7c948; font-weight: 600; }
+
 /* COUNTDOWN */
 #countdown {
   position: fixed; inset: 0; z-index: 90;
@@ -229,6 +267,18 @@ canvas { display: block; }
 </div>
 <div id="truckStatus"></div>
 <div id="speedIndicator"></div>
+
+<!-- PAUSE BUTTON -->
+<button id="pauseBtn" title="Pause (P)">⏸</button>
+
+<!-- PAUSE MENU -->
+<div id="pauseMenu">
+  <h1>Paused</h1>
+  <button class="pause-btn primary" id="resumeBtn">Resume</button>
+  <button class="pause-btn secondary" id="pauseRestartBtn">Restart</button>
+  <button class="pause-btn tertiary" id="pauseHomeBtn">Back to Home</button>
+  <div id="pauseHint">Press <span>P</span> to resume</div>
+</div>
 
 <!-- COUNTDOWN -->
 <div id="countdown"></div>
@@ -331,11 +381,13 @@ function createGLBCar(charIndex, index) {
   // Deep clone using SkeletonUtils-style clone to preserve materials & textures
   const model = deepCloneGLTF(template);
 
-  // Arvy's GLB has a different axis convention than the other Sketchfab models —
-  // its height axis ends up pointing sideways in world space, leaving the RV
-  // lying on its side. Rotate -90° around Z so the roof points up.
+  // Arvy's GLB loads roof-up already, but its body length runs along world X
+  // while every other car drives along world Z. That made the RV travel
+  // sideways; the previous Z-axis "fixes" rolled it onto its head instead.
+  // The correct fix is a yaw (Y-axis) rotation that turns the length to face
+  // forward while keeping the roof pointing up — so it sits on its tires.
   if (char.glb === 'arvy.glb') {
-    model.rotation.z = -Math.PI / 2;
+    model.rotation.y = -Math.PI / 2;
   }
 
   // Compute bounding box to auto-scale
@@ -396,6 +448,7 @@ let obstacles = [];
 let ramps = [];
 let fans = [];
 let gameRunning = false;
+let paused = false;
 let keys = {};
 // --- GAMEPAD (PS5 DualSense via Bluetooth, W3C Standard Gamepad mapping) ---
 const gamepad = { throttle: 0, steer: 0, jumpEdge: false, boostEdge: false, rsX: 0, rsY: 0 };
@@ -723,8 +776,72 @@ document.getElementById('restartBtn').onclick = () => {
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.code)) e.preventDefault();
+  // P toggles pause while a round is in progress.
+  if (e.code === 'KeyP' && gameRunning) {
+    e.preventDefault();
+    togglePause();
+  }
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ============================================================
+// PAUSE
+// ============================================================
+function togglePause() { paused ? resumeGame() : pauseGame(); }
+
+function pauseGame() {
+  if (!gameRunning || paused) return;
+  paused = true;
+  document.getElementById('pauseMenu').style.display = 'flex';
+  document.getElementById('pauseBtn').textContent = '▶';
+  // Freeze audio so the frozen scene is silent.
+  stopEngineSound();
+  stopCrowdAmbient();
+  if (bgMusic) bgMusic.pause();
+}
+
+function resumeGame() {
+  if (!gameRunning || !paused) return;
+  paused = false;
+  document.getElementById('pauseMenu').style.display = 'none';
+  document.getElementById('pauseBtn').textContent = '⏸';
+  // Restart looping audio and pick the loop back up.
+  startEngineSound();
+  startCrowdAmbient();
+  if (bgMusic) bgMusic.play().catch(e => {});
+  lastTime = performance.now();
+  requestAnimationFrame(gameLoop);
+}
+
+// Tear the running round down and return to the start/character-select screen.
+function goToHome() {
+  gameRunning = false;
+  paused = false;
+  document.getElementById('pauseMenu').style.display = 'none';
+  document.getElementById('pauseBtn').style.display = 'none';
+  document.getElementById('pauseBtn').textContent = '⏸';
+  stopEngineSound();
+  stopCrowdAmbient();
+  stopBgMusic();
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('truckStatus').style.display = 'none';
+  document.getElementById('speedIndicator').style.display = 'none';
+  document.getElementById('endScreen').style.display = 'none';
+  // Rebuild the picker so the current selection is highlighted.
+  buildColorPicker();
+  document.getElementById('startScreen').style.display = 'block';
+}
+
+document.getElementById('pauseBtn').onclick = togglePause;
+document.getElementById('resumeBtn').onclick = resumeGame;
+document.getElementById('pauseRestartBtn').onclick = () => {
+  // Restart with the same character that's currently selected.
+  paused = false;
+  document.getElementById('pauseMenu').style.display = 'none';
+  document.getElementById('pauseBtn').textContent = '⏸';
+  startGame();
+};
+document.getElementById('pauseHomeBtn').onclick = goToHome;
 
 // --- GAMEPAD (PS5 DualSense over Bluetooth) ---
 // Uses the standard W3C Gamepad mapping that Chrome/Edge/Safari expose for the
@@ -2438,7 +2555,7 @@ function updateHUD() {
 // ============================================================
 let lastTime = 0;
 function gameLoop(time) {
-  if (!gameRunning) return;
+  if (!gameRunning || paused) return;
   requestAnimationFrame(gameLoop);
 
   const dt = Math.min((time - lastTime) / 16.67, 3);
@@ -2643,6 +2760,13 @@ async function startGame() {
   document.getElementById('hud').style.display = 'block';
   document.getElementById('truckStatus').style.display = 'block';
   document.getElementById('speedIndicator').style.display = 'block';
+
+  // Reset pause state and reveal the in-game pause button.
+  paused = false;
+  document.getElementById('pauseMenu').style.display = 'none';
+  const pauseBtnEl = document.getElementById('pauseBtn');
+  pauseBtnEl.textContent = '⏸';
+  pauseBtnEl.style.display = 'block';
 
   const cdEl = document.getElementById('countdown');
   cdEl.style.display = 'flex';
@@ -2912,6 +3036,9 @@ function stopWinnerCelebration() {
 
 function endGame(won, winnerIndex) {
   gameRunning = false;
+  paused = false;
+  document.getElementById('pauseMenu').style.display = 'none';
+  document.getElementById('pauseBtn').style.display = 'none';
   stopEngineSound();
   stopCrowdAmbient();
   stopBgMusic();
