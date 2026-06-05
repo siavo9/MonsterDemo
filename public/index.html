@@ -2966,7 +2966,9 @@ function buildCelebrationModel(charIndex, targetSize) {
   }
 
   const model = deepCloneGLTF(template);
-  if (char.glb === 'arvy.glb') model.rotation.z = Math.PI / 2;
+  // Same orientation fix as the in-game car: yaw so Arvy faces forward and sits
+  // on his tires (a Z-roll left him standing on his back/head).
+  if (char.glb === 'arvy.glb') model.rotation.y = Math.PI / 2;
 
   const bbox = new THREE.Box3().setFromObject(model);
   const size = new THREE.Vector3();
