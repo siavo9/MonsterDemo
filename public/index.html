@@ -386,8 +386,10 @@ function createGLBCar(charIndex, index) {
   // sideways; the previous Z-axis "fixes" rolled it onto its head instead.
   // The correct fix is a yaw (Y-axis) rotation that turns the length to face
   // forward while keeping the roof pointing up — so it sits on its tires.
+  // Use +90° so the front of the RV points the same way the truck drives
+  // (the −90° variant left him facing backwards).
   if (char.glb === 'arvy.glb') {
-    model.rotation.y = -Math.PI / 2;
+    model.rotation.y = Math.PI / 2;
   }
 
   // Compute bounding box to auto-scale
@@ -709,7 +711,14 @@ function stopCrowdAmbient() {
 }
 
 // --- BACKGROUND MUSIC ---
-let bgMusic;
+// Create and preload the track immediately on page load so the (large) mp3 is
+// already buffered by the time a round begins — otherwise the first play() has
+// to wait on the download and the music starts noticeably late.
+let bgMusic = new Audio('music.mp3');
+bgMusic.loop = true;
+bgMusic.volume = 0.4;
+bgMusic.preload = 'auto';
+bgMusic.load();
 function startBgMusic() {
   if (!bgMusic) {
     bgMusic = new Audio('music.mp3');
@@ -2109,20 +2118,44 @@ function placeTrucks() {
 function setupCamera() {
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 300);
 }
-function updateCamera() {
+// Pick whose truck the camera should track. Normally it's the player, but once
+// the player is eliminated we spectate the current leader — the living truck
+// with the most health — switching automatically if the lead changes, right up
+// until the round ends.
+function getCameraTarget() {
   const player = trucks[playerIndex];
-  if (!player) return;
+  if (player && player.alive) return player;
+  let leader = null, bestHealth = -Infinity;
+  for (const t of trucks) {
+    if (t.alive && t.health > bestHealth) { bestHealth = t.health; leader = t; }
+  }
+  return leader || player;
+}
+
+function updateCamera() {
+  const target = getCameraTarget();
+  if (!target) return;
   const dist = 12;
   const height = 7;
+  const focus = target.mesh.position;
   // Right-stick view offsets orbit the camera around the truck.
-  const viewAngle = player.rotationY + camYawOffset;
-  const targetX = player.mesh.position.x - Math.sin(viewAngle) * dist;
-  const targetZ = player.mesh.position.z - Math.cos(viewAngle) * dist;
-  const targetY = player.mesh.position.y + height + camPitchOffset;
-  camera.position.x += (targetX - camera.position.x) * 0.08;
-  camera.position.y += (targetY - camera.position.y) * 0.08;
-  camera.position.z += (targetZ - camera.position.z) * 0.08;
-  camera.lookAt(player.mesh.position.x, player.mesh.position.y + 1, player.mesh.position.z);
+  const viewAngle = target.rotationY + camYawOffset;
+  const targetX = focus.x - Math.sin(viewAngle) * dist;
+  const targetZ = focus.z - Math.cos(viewAngle) * dist;
+  const targetY = focus.y + height + camPitchOffset;
+  camera.position.x += (targetX - camera.position.x) * 0.12;
+  camera.position.y += (targetY - camera.position.y) * 0.12;
+  camera.position.z += (targetZ - camera.position.z) * 0.12;
+  // Lock the camera to a fixed horizontal distance from the truck. Smoothing
+  // alone lets the camera lag behind at speed, which steadily increases the
+  // follow distance and looks like an automatic zoom-out. Re-projecting onto
+  // the fixed-distance circle keeps the orbit smooth while pinning the zoom.
+  const cdx = camera.position.x - focus.x;
+  const cdz = camera.position.z - focus.z;
+  const cd = Math.hypot(cdx, cdz) || 1;
+  camera.position.x = focus.x + (cdx / cd) * dist;
+  camera.position.z = focus.z + (cdz / cd) * dist;
+  camera.lookAt(focus.x, focus.y + 1, focus.z);
 }
 
 // ============================================================
@@ -2773,6 +2806,10 @@ async function startGame() {
   let count = 3;
   cdEl.textContent = count;
 
+  // Kick the music off the moment the round starts (during the 3-2-1 countdown)
+  // rather than waiting for "GO!", so it's playing as soon as you start.
+  startBgMusic();
+
   const cdInterval = setInterval(() => {
     count--;
     if (count > 0) {
@@ -2788,7 +2825,7 @@ async function startGame() {
       lastTime = performance.now();
       startEngineSound();
       startCrowdAmbient();
-      startBgMusic();
+      // Music was already started when the countdown began.
       requestAnimationFrame(gameLoop);
     }
   }, 800);
