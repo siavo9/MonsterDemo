@@ -213,6 +213,21 @@ canvas { display: block; }
 #pauseHint span { color: #f7c948; font-weight: 600; }
 
 /* COUNTDOWN */
+#eliminationBanner {
+  position: fixed; top: 22%; left: 50%; transform: translateX(-50%);
+  z-index: 80; display: none; text-align: center;
+  pointer-events: none; user-select: none;
+}
+#eliminationTitle {
+  font-size: 4rem; font-weight: 900; color: #e74c3c;
+  text-shadow: 0 0 30px rgba(231,76,60,0.7), 0 3px 6px rgba(0,0,0,0.6);
+  letter-spacing: 2px;
+}
+#eliminationPlace {
+  margin-top: 8px; font-size: 1.6rem; font-weight: 700; color: #fff;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+}
+
 #countdown {
   position: fixed; inset: 0; z-index: 90;
   display: none; align-items: center; justify-content: center;
@@ -267,6 +282,12 @@ canvas { display: block; }
 </div>
 <div id="truckStatus"></div>
 <div id="speedIndicator"></div>
+
+<!-- ELIMINATION BANNER (shown while spectating after the player loses) -->
+<div id="eliminationBanner">
+  <div id="eliminationTitle">You Lost</div>
+  <div id="eliminationPlace"></div>
+</div>
 
 <!-- PAUSE BUTTON -->
 <button id="pauseBtn" title="Pause (P)">⏸</button>
@@ -836,6 +857,7 @@ function goToHome() {
   document.getElementById('truckStatus').style.display = 'none';
   document.getElementById('speedIndicator').style.display = 'none';
   document.getElementById('endScreen').style.display = 'none';
+  document.getElementById('eliminationBanner').style.display = 'none';
   // Rebuild the picker so the current selection is highlighted.
   buildColorPicker();
   document.getElementById('startScreen').style.display = 'block';
@@ -2122,6 +2144,18 @@ function setupCamera() {
 // the player is eliminated we spectate the current leader — the living truck
 // with the most health — switching automatically if the lead changes, right up
 // until the round ends.
+// Reveal the "You Lost" banner and report the player's finishing place. The
+// player's place is fixed the moment they're eliminated: every truck still
+// alive will finish ahead of them, so place = total - (their elimination slot).
+function showEliminationBanner() {
+  const totalCount = trucks.length;
+  const position = totalCount - eliminationOrder.indexOf(playerIndex);
+  const suffix = position === 1 ? 'st' : position === 2 ? 'nd' : position === 3 ? 'rd' : 'th';
+  document.getElementById('eliminationPlace').textContent =
+    `You placed ${position}${suffix} out of ${totalCount}`;
+  document.getElementById('eliminationBanner').style.display = 'block';
+}
+
 function getCameraTarget() {
   const player = trucks[playerIndex];
   if (player && player.alive) return player;
@@ -2706,6 +2740,12 @@ function gameLoop(time) {
       playSound('eliminate');
       playSound('cheer');
 
+      // When the player goes out, show a "You Lost" banner with their place.
+      // It stays on screen while we spectate the leader until the round ends.
+      if (t.index === playerIndex) {
+        showEliminationBanner();
+      }
+
       for (let s = 0; s < 15; s++) {
         smokeParticles.push(spawnSmoke(
           t.mesh.position.x + (Math.random() - 0.5) * 3,
@@ -2790,6 +2830,7 @@ async function startGame() {
 
   document.getElementById('startScreen').style.display = 'none';
   document.getElementById('endScreen').style.display = 'none';
+  document.getElementById('eliminationBanner').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
   document.getElementById('truckStatus').style.display = 'block';
   document.getElementById('speedIndicator').style.display = 'block';
@@ -3078,6 +3119,7 @@ function endGame(won, winnerIndex) {
   paused = false;
   document.getElementById('pauseMenu').style.display = 'none';
   document.getElementById('pauseBtn').style.display = 'none';
+  document.getElementById('eliminationBanner').style.display = 'none';
   stopEngineSound();
   stopCrowdAmbient();
   stopBgMusic();
