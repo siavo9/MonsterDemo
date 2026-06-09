@@ -502,6 +502,13 @@ const REVERSE_MAX = 0.45;
 const TURN_SPEED = 0.04;
 const FRICTION = 0.985;
 const HIT_SELF_DAMAGE_RATIO = 0.15;
+// Computer-controlled cars drive at a fraction of the player's top speed so the
+// derby plays out at a calmer pace and lasts longer.
+const AI_SPEED_FACTOR = 0.62;
+// Damage taken from hitting the environment (arena walls and ramp sides) is
+// scaled down so cars mostly chip away at each other instead of dying on scenery.
+// Car-on-car collisions are unaffected — that's still the point of the derby.
+const ENV_DAMAGE_FACTOR = 0.3;
 
 // --- GAME STATE ---
 let scene, camera, renderer;
@@ -510,6 +517,9 @@ let difficulty = 'easy';
 let trucks = [];
 let obstacles = [];
 let ramps = [];
+// Ground-level fire pit footprints ({x, z, r}) — used to keep cars from
+// spawning on top of a fire.
+let groundFires = [];
 let fans = [];
 let gameRunning = false;
 let paused = false;
@@ -2201,18 +2211,41 @@ function isOnRamp(x, z, margin = 4) {
   });
 }
 
+// True if (x,z) sits on or near a barrel/crate obstacle or a ground-level fire
+// pit — used alongside isOnRamp to keep cars from spawning on top of stuff.
+function isOnHazard(x, z, margin = 2.5) {
+  for (const ob of obstacles) {
+    if (!ob.active) continue;
+    if (Math.hypot(x - ob.mesh.position.x, z - ob.mesh.position.z) < margin) return true;
+  }
+  for (const f of groundFires) {
+    if (Math.hypot(x - f.x, z - f.z) < f.r + margin) return true;
+  }
+  return false;
+}
+
 function placeTrucks() {
   trucks = [];
   eliminationOrder = [];
   const count = CARS2_CHARACTERS.length;
 
   for (let i = 0; i < count; i++) {
-    const angle = (i / count) * Math.PI * 2;
+    const baseAngle = (i / count) * Math.PI * 2;
+    // Find a clear spawn point: nudge the radius inward and the angle sideways
+    // until the spot is off any ramp, barrel, crate, or fire pit.
+    let angle = baseAngle;
     let dist = 35;
-    // If this spawn point lands on a ramp, pull it inward until it's clear.
     let guard = 0;
-    while (isOnRamp(Math.cos(angle) * dist, Math.sin(angle) * dist) && dist > 10 && guard++ < 20) {
-      dist -= 3;
+    while (
+      (isOnRamp(Math.cos(angle) * dist, Math.sin(angle) * dist) ||
+        isOnHazard(Math.cos(angle) * dist, Math.sin(angle) * dist)) &&
+      guard++ < 40
+    ) {
+      // Alternate between shifting the angle and pulling inward so we sweep a
+      // small region around the ideal spawn point rather than marching straight
+      // toward the arena center.
+      angle = baseAngle + (guard % 2 === 0 ? 1 : -1) * 0.12 * Math.ceil(guard / 2);
+      if (guard % 6 === 0 && dist > 12) dist -= 3;
     }
 
     const charIndex = i % CARS2_CHARACTERS.length;
@@ -2394,8 +2427,8 @@ function wallCollision(t) {
     const prevSpeed = Math.abs(t.speed);
     t.speed = Math.max(prevSpeed * 0.4, 0.15);
 
-    // Wall damage based on impact speed
-    t.health -= prevSpeed * 6;
+    // Wall damage based on impact speed — softened so cars don't die on scenery.
+    t.health -= prevSpeed * 6 * ENV_DAMAGE_FACTOR;
     t.health = Math.max(0, t.health);
     t.flashTimer = 4;
     if (prevSpeed > 0.1) playSound('crash');
@@ -2513,9 +2546,10 @@ function checkRamp(t) {
       t.mesh.rotation.y = t.rotationY;
 
       // Bounce back, take impact damage, flash & crash sound (like a wall hit).
+      // Softened the same way as wall hits so ramps don't shred cars.
       const prevSpeed = speed;
       t.speed = Math.max(prevSpeed * 0.4, 0.15);
-      t.health -= prevSpeed * 6;
+      t.health -= prevSpeed * 6 * ENV_DAMAGE_FACTOR;
       t.health = Math.max(0, t.health);
       t.flashTimer = 4;
       if (prevSpeed > 0.1) playSound('crash');
@@ -2598,10 +2632,11 @@ function updateAI(t, dt) {
   const turnAmt = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), TURN_SPEED);
   t.rotationY += turnAmt;
 
-  // Constantly accelerate toward full speed so the arena is always full of
-  // fast-moving traffic. Easy cars run a hair slower to stay beatable.
-  const maxSpd = difficulty === 'easy' ? MAX_SPEED * 0.9 : MAX_SPEED;
-  t.speed = Math.min(t.speed + ACCELERATION * 0.8, maxSpd);
+  // Constantly accelerate toward the AI's top speed so the arena always has
+  // traffic, but cap it well below the player's max so the cars cruise at a
+  // calmer pace. Easy cars run a hair slower still to stay beatable.
+  const maxSpd = MAX_SPEED * AI_SPEED_FACTOR * (difficulty === 'easy' ? 0.9 : 1);
+  t.speed = Math.min(t.speed + ACCELERATION * 0.6, maxSpd);
 }
 
 // ============================================================
@@ -2684,6 +2719,12 @@ function spawnFireBrazier(x, y, z, scale, withLight) {
   }
 
   scene.add(group);
+
+  // Track fire pits sitting on the arena floor (not the ones perched up on the
+  // perimeter fence) so spawn placement can steer clear of them.
+  if (y <= 0.01) {
+    groundFires.push({ x, z, r: 1.5 * scale });
+  }
 
   fireFlames.push({
     inner, mid, outer, light, coal,
@@ -2988,6 +3029,7 @@ async function startGame() {
   smokeParticles = [];
   confettiParticles = [];
   fireFlames = [];
+  groundFires = [];
   lastStatusHtml = '';
 
   if (!renderer) {
