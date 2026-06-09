@@ -1100,34 +1100,26 @@ function buildThunderHollowScene() {
     scene.add(line);
   }
 
-  // --- CENTER LAUNCH RAMPS (figure-8 crossover) ---
+  // --- CENTER LAUNCH RAMP ---
   if (rampModelTemplate) {
-    // Two of the new GLB ramps facing each other along Z, so you can launch
-    // from either side of the center. Each one's up-slope points toward the
-    // middle; the high/back ends face the central gap, so a wrong-way hit
-    // there acts as a wall (same directional rules as the edge ramps).
-    const centerOffset = 8; // distance of each ramp from arena center
-    [{ z: -centerOffset, ry: 0 },        // south ramp → launches northbound cars
-     { z: centerOffset, ry: Math.PI }]   // north ramp → launches southbound cars
-    .forEach(rp => {
-      const ry = rp.ry + RAMP_YAW_OFFSET;
-      const fx = Math.sin(ry);
-      const fz = Math.cos(ry);
-      const rampMesh = deepCloneGLTF(rampModelTemplate);
-      rampMesh.position.set(0, 0, rp.z);
-      rampMesh.rotation.y = ry;
-      scene.add(rampMesh);
+    // A single GLB ramp at the center, same as the edge ramps.
+    const ry = 0 + RAMP_YAW_OFFSET;
+    const fx = Math.sin(ry);
+    const fz = Math.cos(ry);
+    const rampMesh = deepCloneGLTF(rampModelTemplate);
+    rampMesh.position.set(0, 0, 0);
+    rampMesh.rotation.y = ry;
+    scene.add(rampMesh);
 
-      const bb = new THREE.Box3().setFromObject(rampModelTemplate);
-      const sz = new THREE.Vector3();
-      bb.getSize(sz);
-      ramps.push({
-        mesh: rampMesh, x: 0, z: rp.z,
-        halfW: Math.max(sz.x, sz.z) / 2 * 0.6,
-        halfD: Math.max(sz.x, sz.z) / 2,
-        topY: sz.y,
-        fx, fz, ry, directional: true,
-      });
+    const bb = new THREE.Box3().setFromObject(rampModelTemplate);
+    const sz = new THREE.Vector3();
+    bb.getSize(sz);
+    ramps.push({
+      mesh: rampMesh, x: 0, z: 0,
+      halfW: Math.max(sz.x, sz.z) / 2 * 0.6,
+      halfD: Math.max(sz.x, sz.z) / 2,
+      topY: sz.y,
+      fx, fz, ry, directional: true,
     });
   } else {
     // --- Procedural bridge fallback (used only if ramp.glb is absent) ---
@@ -1422,11 +1414,12 @@ function buildThunderHollowScene() {
   // Extra ramps at edges. Each ramp's up-slope (jump) direction points along
   // its local +Z, rotated by `ry`. Drive up that way to launch; hit it from
   // the opposite (high) end and it acts like a wall (see checkRamp).
+  const edgeR = 62; // out near the arena wall, well clear of the spawn ring (r=35)
   const rampPositions = [
-    { x: 35, z: 0, ry: 0 },
-    { x: -35, z: 0, ry: Math.PI },
-    { x: 0, z: 35, ry: Math.PI / 2 },
-    { x: 0, z: -35, ry: -Math.PI / 2 },
+    { x: edgeR, z: 0, ry: 0 },
+    { x: -edgeR, z: 0, ry: Math.PI },
+    { x: 0, z: edgeR, ry: Math.PI / 2 },
+    { x: 0, z: -edgeR, ry: -Math.PI / 2 },
   ];
   rampPositions.forEach(rp => {
     const ry = rp.ry + RAMP_YAW_OFFSET;
@@ -2193,6 +2186,21 @@ function createCruzRamirez(index) {
 // ============================================================
 // PLACE CARS
 // ============================================================
+// True if (x,z) sits on (or near) any ramp footprint — used to keep cars from
+// spawning on top of a ramp.
+function isOnRamp(x, z, margin = 4) {
+  return ramps.some(r => {
+    const dx = x - r.x;
+    const dz = z - r.z;
+    if (r.directional) {
+      const along = dx * r.fx + dz * r.fz;
+      const side = dx * r.fz - dz * r.fx;
+      return Math.abs(along) < r.halfD + margin && Math.abs(side) < r.halfW + margin;
+    }
+    return Math.abs(dx) < r.halfW + margin && Math.abs(dz) < r.halfD + margin;
+  });
+}
+
 function placeTrucks() {
   trucks = [];
   eliminationOrder = [];
@@ -2200,7 +2208,12 @@ function placeTrucks() {
 
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * Math.PI * 2;
-    const dist = 35;
+    let dist = 35;
+    // If this spawn point lands on a ramp, pull it inward until it's clear.
+    let guard = 0;
+    while (isOnRamp(Math.cos(angle) * dist, Math.sin(angle) * dist) && dist > 10 && guard++ < 20) {
+      dist -= 3;
+    }
 
     const charIndex = i % CARS2_CHARACTERS.length;
     const raw = createGLBCar(charIndex, i);
