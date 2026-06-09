@@ -365,6 +365,47 @@ function preloadAllGLBModels() {
   }));
 }
 
+// --- RAMP MODEL ---
+// Template for the downloaded ramp GLB (public/ramp.glb). Loaded once, cloned
+// per ramp. If the file is missing it stays null and we fall back to the old
+// procedural dirt mound so the game never breaks.
+let rampModelTemplate = null;
+
+// Tuning knobs for the imported ramp model. Adjust these if the GLB loads
+// facing the wrong way or at the wrong size:
+//   RAMP_TARGET_LEN  – how long (deep) each ramp should be in world units
+//   RAMP_YAW_OFFSET  – extra Y rotation (radians) if the model's "up-slope"
+//                      direction isn't pointing along its local +Z. Try
+//                      Math.PI if cars launch off the back, or ±Math.PI/2 if
+//                      it sits sideways.
+const RAMP_TARGET_LEN = 12;
+const RAMP_YAW_OFFSET = 0;
+
+function loadRampModel() {
+  return new Promise((resolve) => {
+    if (rampModelTemplate) { resolve(); return; }
+    glbLoader.load('/ramp.glb', (gltf) => {
+      const model = gltf.scene;
+      // Auto-scale so the longest horizontal dimension matches RAMP_TARGET_LEN.
+      const bbox = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      bbox.getSize(size);
+      const horizMax = Math.max(size.x, size.z) || 1;
+      model.scale.multiplyScalar(RAMP_TARGET_LEN / horizMax);
+      // Snap the base to the ground (y = 0) after scaling.
+      const bbox2 = new THREE.Box3().setFromObject(model);
+      model.position.y -= bbox2.min.y;
+      model.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
+      rampModelTemplate = model;
+      resolve();
+    }, undefined, (err) => {
+      console.warn('ramp.glb not found or failed to load — using procedural ramps.', err);
+      rampModelTemplate = null;
+      resolve();
+    });
+  });
+}
+
 // Deep clone a GLTF scene preserving materials and textures
 function deepCloneGLTF(source) {
   const clone = source.clone();
@@ -1059,31 +1100,62 @@ function buildThunderHollowScene() {
     scene.add(line);
   }
 
-  // --- FIGURE-8 CROSSOVER RAMP (center) ---
-  const crossGroup = new THREE.Group();
-  const crossMat = new THREE.MeshStandardMaterial({ color: 0x6b4e1f, roughness: 0.8 });
-  // Raised crossing bridge
-  const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(10, 0.4, 18), crossMat);
-  bridgeDeck.position.set(0, 2.5, 0);
-  crossGroup.add(bridgeDeck);
-  // Support pillars under bridge
-  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 0.9 });
-  [[-3, -6], [-3, 6], [3, -6], [3, 6]].forEach(([px, pz]) => {
-    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2.5, 6), pillarMat);
-    pillar.position.set(px, 1.25, pz);
-    crossGroup.add(pillar);
-  });
-  // Approach ramps for the bridge
-  const rampUpMat = new THREE.MeshStandardMaterial({ color: 0x7a5c2a, roughness: 0.7, side: THREE.DoubleSide });
-  [[-1, -14], [1, 14]].forEach(([dir, zOff]) => {
-    const rampGeo = new THREE.BoxGeometry(10, 0.3, 8);
-    const ramp = new THREE.Mesh(rampGeo, rampUpMat);
-    ramp.position.set(0, 1.25, zOff * 0.5);
-    ramp.rotation.x = dir * 0.3;
-    crossGroup.add(ramp);
-  });
-  scene.add(crossGroup);
-  ramps.push({ mesh: crossGroup, x: 0, z: 0, halfW: 5, halfD: 14, ry: 0 });
+  // --- CENTER LAUNCH RAMPS (figure-8 crossover) ---
+  if (rampModelTemplate) {
+    // Two of the new GLB ramps facing each other along Z, so you can launch
+    // from either side of the center. Each one's up-slope points toward the
+    // middle; the high/back ends face the central gap, so a wrong-way hit
+    // there acts as a wall (same directional rules as the edge ramps).
+    const centerOffset = 8; // distance of each ramp from arena center
+    [{ z: -centerOffset, ry: 0 },        // south ramp → launches northbound cars
+     { z: centerOffset, ry: Math.PI }]   // north ramp → launches southbound cars
+    .forEach(rp => {
+      const ry = rp.ry + RAMP_YAW_OFFSET;
+      const fx = Math.sin(ry);
+      const fz = Math.cos(ry);
+      const rampMesh = deepCloneGLTF(rampModelTemplate);
+      rampMesh.position.set(0, 0, rp.z);
+      rampMesh.rotation.y = ry;
+      scene.add(rampMesh);
+
+      const bb = new THREE.Box3().setFromObject(rampModelTemplate);
+      const sz = new THREE.Vector3();
+      bb.getSize(sz);
+      ramps.push({
+        mesh: rampMesh, x: 0, z: rp.z,
+        halfW: Math.max(sz.x, sz.z) / 2 * 0.6,
+        halfD: Math.max(sz.x, sz.z) / 2,
+        topY: sz.y,
+        fx, fz, ry, directional: true,
+      });
+    });
+  } else {
+    // --- Procedural bridge fallback (used only if ramp.glb is absent) ---
+    const crossGroup = new THREE.Group();
+    const crossMat = new THREE.MeshStandardMaterial({ color: 0x6b4e1f, roughness: 0.8 });
+    // Raised crossing bridge
+    const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(10, 0.4, 18), crossMat);
+    bridgeDeck.position.set(0, 2.5, 0);
+    crossGroup.add(bridgeDeck);
+    // Support pillars under bridge
+    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 0.9 });
+    [[-3, -6], [-3, 6], [3, -6], [3, 6]].forEach(([px, pz]) => {
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2.5, 6), pillarMat);
+      pillar.position.set(px, 1.25, pz);
+      crossGroup.add(pillar);
+    });
+    // Approach ramps for the bridge
+    const rampUpMat = new THREE.MeshStandardMaterial({ color: 0x7a5c2a, roughness: 0.7, side: THREE.DoubleSide });
+    [[-1, -14], [1, 14]].forEach(([dir, zOff]) => {
+      const rampGeo = new THREE.BoxGeometry(10, 0.3, 8);
+      const ramp = new THREE.Mesh(rampGeo, rampUpMat);
+      ramp.position.set(0, 1.25, zOff * 0.5);
+      ramp.rotation.x = dir * 0.3;
+      crossGroup.add(ramp);
+    });
+    scene.add(crossGroup);
+    ramps.push({ mesh: crossGroup, x: 0, z: 0, halfW: 5, halfD: 14, ry: 0, directional: false });
+  }
 
   // --- WALLS: wooden fence with tire stacks ---
   const wallSegments = 48;
@@ -1347,7 +1419,9 @@ function buildThunderHollowScene() {
     obstacles.push({ mesh: barrel, type: 'barrel', vx: 0, vz: 0, active: true });
   }
 
-  // Extra ramps (dirt mounds) at edges
+  // Extra ramps at edges. Each ramp's up-slope (jump) direction points along
+  // its local +Z, rotated by `ry`. Drive up that way to launch; hit it from
+  // the opposite (high) end and it acts like a wall (see checkRamp).
   const rampPositions = [
     { x: 35, z: 0, ry: 0 },
     { x: -35, z: 0, ry: Math.PI },
@@ -1355,39 +1429,65 @@ function buildThunderHollowScene() {
     { x: 0, z: -35, ry: -Math.PI / 2 },
   ];
   rampPositions.forEach(rp => {
-    const rampGroup = new THREE.Group();
-    rampGroup.position.set(rp.x, 0, rp.z);
-    rampGroup.rotation.y = rp.ry;
+    const ry = rp.ry + RAMP_YAW_OFFSET;
+    // Up-slope / forward unit vector in world space (local +Z rotated by ry).
+    const fx = Math.sin(ry);
+    const fz = Math.cos(ry);
 
-    const rampW = 8;
-    const rampLen = 10;
-    const rampH = 2.5;
-    const segments = 12;
-    const dirtRampMat = new THREE.MeshStandardMaterial({ color: 0x7a5c2a, roughness: 0.9, side: THREE.DoubleSide });
+    if (rampModelTemplate) {
+      // --- Imported GLB ramp ---
+      const rampMesh = deepCloneGLTF(rampModelTemplate);
+      rampMesh.position.set(rp.x, 0, rp.z);
+      rampMesh.rotation.y = ry;
+      scene.add(rampMesh);
 
-    for (let i = 0; i < segments; i++) {
-      const t0 = i / segments;
-      const t1 = (i + 1) / segments;
-      const z0 = -rampLen / 2 + t0 * rampLen;
-      const z1 = -rampLen / 2 + t1 * rampLen;
-      const y0 = Math.sin(t0 * Math.PI / 2) * rampH;
-      const y1 = Math.sin(t1 * Math.PI / 2) * rampH;
-      const segLen = Math.sqrt((z1 - z0) ** 2 + (y1 - y0) ** 2);
-      const segAngle = Math.atan2(y1 - y0, z1 - z0);
+      // Footprint from the scaled model's bounding box.
+      const bb = new THREE.Box3().setFromObject(rampModelTemplate);
+      const sz = new THREE.Vector3();
+      bb.getSize(sz);
+      ramps.push({
+        mesh: rampMesh, x: rp.x, z: rp.z,
+        halfW: Math.max(sz.x, sz.z) / 2 * 0.6,   // across-slope half width
+        halfD: Math.max(sz.x, sz.z) / 2,         // along-slope half depth
+        topY: sz.y,                              // ramp height (for wall face)
+        fx, fz, ry, directional: true,
+      });
+    } else {
+      // --- Procedural dirt-mound fallback (used only if ramp.glb is absent) ---
+      const rampGroup = new THREE.Group();
+      rampGroup.position.set(rp.x, 0, rp.z);
+      rampGroup.rotation.y = ry;
 
-      const seg = new THREE.Mesh(new THREE.BoxGeometry(rampW, 0.2, segLen + 0.05), dirtRampMat);
-      seg.position.set(0, (y0 + y1) / 2, (z0 + z1) / 2);
-      seg.rotation.x = -segAngle;
-      rampGroup.add(seg);
+      const rampW = 8;
+      const rampLen = 10;
+      const rampH = 2.5;
+      const segments = 12;
+      const dirtRampMat = new THREE.MeshStandardMaterial({ color: 0x7a5c2a, roughness: 0.9, side: THREE.DoubleSide });
+
+      for (let i = 0; i < segments; i++) {
+        const t0 = i / segments;
+        const t1 = (i + 1) / segments;
+        const z0 = -rampLen / 2 + t0 * rampLen;
+        const z1 = -rampLen / 2 + t1 * rampLen;
+        const y0 = Math.sin(t0 * Math.PI / 2) * rampH;
+        const y1 = Math.sin(t1 * Math.PI / 2) * rampH;
+        const segLen = Math.sqrt((z1 - z0) ** 2 + (y1 - y0) ** 2);
+        const segAngle = Math.atan2(y1 - y0, z1 - z0);
+
+        const seg = new THREE.Mesh(new THREE.BoxGeometry(rampW, 0.2, segLen + 0.05), dirtRampMat);
+        seg.position.set(0, (y0 + y1) / 2, (z0 + z1) / 2);
+        seg.rotation.x = -segAngle;
+        rampGroup.add(seg);
+      }
+
+      const padGeo = new THREE.BoxGeometry(rampW, 0.2, 3);
+      const pad = new THREE.Mesh(padGeo, dirtRampMat);
+      pad.position.set(0, rampH, rampLen / 2 + 1);
+      rampGroup.add(pad);
+
+      scene.add(rampGroup);
+      ramps.push({ mesh: rampGroup, x: rp.x, z: rp.z, halfW: 4, halfD: 6, topY: rampH, fx, fz, ry, directional: true });
     }
-
-    const padGeo = new THREE.BoxGeometry(rampW, 0.2, 3);
-    const pad = new THREE.Mesh(padGeo, dirtRampMat);
-    pad.position.set(0, rampH, rampLen / 2 + 1);
-    rampGroup.add(pad);
-
-    scene.add(rampGroup);
-    ramps.push({ mesh: rampGroup, x: rp.x, z: rp.z, halfW: 4, halfD: 6, ry: rp.ry });
   });
 }
 
@@ -2348,12 +2448,63 @@ function checkRamp(t) {
   ramps.forEach(r => {
     const dx = t.mesh.position.x - r.x;
     const dz = t.mesh.position.z - r.z;
-    if (Math.abs(dx) < r.halfW + 1.5 && Math.abs(dz) < r.halfD + 1.5) {
-      if (t.onGround && Math.abs(t.speed) > 0.15) {
-        t.vy = Math.abs(t.speed) * 0.4;
+
+    // Non-directional ramps (center figure-8 bridge): original jump assist,
+    // works from any direction.
+    if (!r.directional) {
+      if (Math.abs(dx) < r.halfW + 1.5 && Math.abs(dz) < r.halfD + 1.5) {
+        if (t.onGround && Math.abs(t.speed) > 0.15) {
+          t.vy = Math.abs(t.speed) * 0.4;
+          t.onGround = false;
+          playSound('jump');
+        }
+      }
+      return;
+    }
+
+    // Directional edge ramp. Project the car into the ramp's local frame:
+    //   along  = distance up the slope ( +fwd = toward the high end )
+    //   side   = lateral offset across the ramp
+    const along = dx * r.fx + dz * r.fz;
+    const side  = dx * r.fz - dz * r.fx;
+    if (Math.abs(along) > r.halfD + 1.5 || Math.abs(side) > r.halfW + 1.0) return;
+
+    // The car's facing direction, projected onto the up-slope vector.
+    const faceDot = Math.sin(t.rotationY) * r.fx + Math.cos(t.rotationY) * r.fz;
+    const headingDot = faceDot * (Math.sign(t.speed) || 1); // travel vs. up-slope
+    const speed = Math.abs(t.speed);
+
+    if (headingDot > 0.25) {
+      // Driving UP the ramp the correct way → launch into the air.
+      if (t.onGround && speed > 0.15) {
+        t.vy = speed * 0.5;
         t.onGround = false;
         playSound('jump');
       }
+    } else if (headingDot < -0.25 && along > -r.halfD * 0.3) {
+      // Coming at the high/back end the wrong way → solid wall: stop & bounce.
+      // Eject the car back out past the high edge (along the +fwd normal).
+      const correction = (r.halfD) - along;
+      if (correction > 0) {
+        t.mesh.position.x += r.fx * correction;
+        t.mesh.position.z += r.fz * correction;
+      }
+      // Reflect the car's facing off the wall normal (+fwd).
+      const moveX = Math.sin(t.rotationY);
+      const moveZ = Math.cos(t.rotationY);
+      const dot = moveX * r.fx + moveZ * r.fz;
+      const reflectX = moveX - 2 * dot * r.fx;
+      const reflectZ = moveZ - 2 * dot * r.fz;
+      t.rotationY = Math.atan2(reflectX, reflectZ);
+      t.mesh.rotation.y = t.rotationY;
+
+      // Bounce back, take impact damage, flash & crash sound (like a wall hit).
+      const prevSpeed = speed;
+      t.speed = Math.max(prevSpeed * 0.4, 0.15);
+      t.health -= prevSpeed * 6;
+      t.health = Math.max(0, t.health);
+      t.flashTimer = 4;
+      if (prevSpeed > 0.1) playSound('crash');
     }
   });
 }
@@ -2821,6 +2972,7 @@ async function startGame() {
   startBtn.textContent = 'LOADING MODELS...';
   startBtn.style.pointerEvents = 'none';
   await preloadAllGLBModels();
+  await loadRampModel();
   startBtn.textContent = 'START';
   startBtn.style.pointerEvents = '';
 
