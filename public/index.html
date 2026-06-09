@@ -2233,6 +2233,7 @@ function placeTrucks() {
       aiTargetAngle: 0,
       aiAccel: false,
       aiTarget: null,
+      stuckTimer: 0,
       flashTimer: 0,
       smokeParticles: []
     };
@@ -2528,14 +2529,32 @@ function checkRamp(t) {
 function updateAI(t, dt) {
   if (!t.alive || t.index === playerIndex) return;
 
+  // Stuck recovery: if a car has been crawling for a moment — pinned against a
+  // wall, jammed on another car, or hung up on an obstacle — spin it around to
+  // a fresh heading and give it a kick. This keeps the whole field of cars
+  // constantly driving instead of sitting idle in a corner.
+  if (Math.abs(t.speed) < 0.2) {
+    t.stuckTimer += dt;
+    if (t.stuckTimer > 0.5) {
+      t.aiTargetAngle = t.rotationY + Math.PI + (Math.random() - 0.5) * 1.2;
+      t.aiTimer = 0.4 + Math.random() * 0.4;
+      t.stuckTimer = 0;
+      t.speed = MAX_SPEED * 0.4;
+    }
+  } else {
+    t.stuckTimer = 0;
+  }
+
   t.aiTimer -= dt;
   if (t.aiTimer <= 0) {
     const aliveTrucks = trucks.filter(tr => tr.alive && tr.index !== t.index);
     if (aliveTrucks.length === 0) return;
 
     if (difficulty === 'easy') {
-      t.aiTimer = 1.5 + Math.random() * 2;
-      if (Math.random() < 0.3) {
+      // Re-pick a heading often so cars roam the whole arena instead of
+      // drifting into a wall and parking there.
+      t.aiTimer = 1.0 + Math.random() * 1.5;
+      if (Math.random() < 0.5) {
         const target = aliveTrucks[Math.floor(Math.random() * aliveTrucks.length)];
         t.aiTargetAngle = Math.atan2(
           target.mesh.position.x - t.mesh.position.x,
@@ -2544,7 +2563,6 @@ function updateAI(t, dt) {
       } else {
         t.aiTargetAngle = t.rotationY + (Math.random() - 0.5) * 1.5;
       }
-      t.aiAccel = Math.random() < 0.7;
     } else {
       t.aiTimer = 0.5 + Math.random() * 0.8;
       let weakest = null, minHp = Infinity;
@@ -2564,13 +2582,14 @@ function updateAI(t, dt) {
           }
         }
       }
-      t.aiAccel = true;
       if (t.boosts > 0 && Math.random() < 0.05) {
         t.boosting = true;
         t.boostTimer = 20;
         t.boosts--;
       }
     }
+    // Every car always drives — no idling or coasting.
+    t.aiAccel = true;
   }
 
   let angleDiff = t.aiTargetAngle - t.rotationY;
@@ -2579,12 +2598,10 @@ function updateAI(t, dt) {
   const turnAmt = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), TURN_SPEED);
   t.rotationY += turnAmt;
 
-  if (t.aiAccel) {
-    const maxSpd = difficulty === 'easy' ? MAX_SPEED * 0.55 : MAX_SPEED * 0.9;
-    t.speed = Math.min(t.speed + ACCELERATION * 0.8, maxSpd);
-  } else {
-    t.speed *= 0.98;
-  }
+  // Constantly accelerate toward full speed so the arena is always full of
+  // fast-moving traffic. Easy cars run a hair slower to stay beatable.
+  const maxSpd = difficulty === 'easy' ? MAX_SPEED * 0.9 : MAX_SPEED;
+  t.speed = Math.min(t.speed + ACCELERATION * 0.8, maxSpd);
 }
 
 // ============================================================
