@@ -141,6 +141,9 @@ canvas { display: block; }
   position: fixed; top: 15px; right: 20px; z-index: 50;
   display: none; text-align: right;
 }
+/* In split-screen the Player 2 HUD occupies the top-right, so drop the car
+   list below it. */
+#truckStatus.two-player { top: 120px; }
 .truck-indicator {
   display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
   justify-content: flex-end;
@@ -274,6 +277,26 @@ canvas { display: block; }
   text-shadow: 0 2px 6px rgba(0,0,0,0.8);
 }
 
+/* PER-PLAYER GAME OVER (split-screen): shown centered over the losing
+   player's half while the other keeps playing. */
+.player-gameover {
+  position: fixed; top: 38%; z-index: 80;
+  display: none; text-align: center;
+  pointer-events: none; user-select: none;
+  transform: translateX(-50%);
+}
+.player-gameover .po-title {
+  font-size: 2.6rem; font-weight: 900; color: #e74c3c;
+  text-shadow: 0 0 30px rgba(231,76,60,0.7), 0 3px 6px rgba(0,0,0,0.6);
+  letter-spacing: 2px;
+}
+.player-gameover .po-sub {
+  margin-top: 6px; font-size: 1.1rem; font-weight: 700; color: #fff;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+}
+#gameOverP1 { left: 25%; }
+#gameOverP2 { left: 75%; }
+
 #countdown {
   position: fixed; inset: 0; z-index: 90;
   display: none; align-items: center; justify-content: center;
@@ -344,6 +367,16 @@ canvas { display: block; }
 
 <!-- SPLIT-SCREEN DIVIDER (two-player mode only) -->
 <div id="splitDivider"></div>
+
+<!-- PER-PLAYER GAME OVER BANNERS (two-player mode) -->
+<div id="gameOverP1" class="player-gameover">
+  <div class="po-title">💀 GAME OVER</div>
+  <div class="po-sub">Player 1 is out</div>
+</div>
+<div id="gameOverP2" class="player-gameover">
+  <div class="po-title">💀 GAME OVER</div>
+  <div class="po-sub">Player 2 is out</div>
+</div>
 
 <!-- PLAYER 2 HUD (shown only in two-player split-screen mode) -->
 <div id="hud2">
@@ -1022,6 +1055,8 @@ function goToHome() {
   document.getElementById('hud').style.display = 'none';
   document.getElementById('hud2').style.display = 'none';
   document.getElementById('splitDivider').style.display = 'none';
+  document.getElementById('gameOverP1').style.display = 'none';
+  document.getElementById('gameOverP2').style.display = 'none';
   document.getElementById('truckStatus').style.display = 'none';
   document.getElementById('speedIndicator').style.display = 'none';
   document.getElementById('endScreen').style.display = 'none';
@@ -3189,7 +3224,15 @@ function gameLoop(time) {
 
       // When the player goes out, show a "You Lost" banner with their place.
       // It stays on screen while we spectate the leader until the round ends.
-      if (t.index === playerIndex && !twoPlayer) {
+      if (twoPlayer) {
+        // Split-screen: flag "Game Over" on the half of whichever human just
+        // got knocked out; the other player keeps going.
+        if (t.index === playerIndex) {
+          document.getElementById('gameOverP1').style.display = 'block';
+        } else if (t.index === player2Index) {
+          document.getElementById('gameOverP2').style.display = 'block';
+        }
+      } else if (t.index === playerIndex) {
         showEliminationBanner();
       }
 
@@ -3289,12 +3332,16 @@ async function startGame() {
   document.getElementById('endScreen').style.display = 'none';
   document.getElementById('eliminationBanner').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
-  // The all-cars status list lives top-right, where Player 2's HUD goes — hide it
-  // in split-screen so they don't overlap.
-  document.getElementById('truckStatus').style.display = twoPlayer ? 'none' : 'block';
+  // The all-cars status list lives top-right; in split-screen the Player 2 HUD
+  // also sits there, so the .two-player class drops the list below it.
+  const truckStatusEl = document.getElementById('truckStatus');
+  truckStatusEl.style.display = 'block';
+  truckStatusEl.classList.toggle('two-player', twoPlayer);
   document.getElementById('speedIndicator').style.display = twoPlayer ? 'none' : 'block';
   document.getElementById('hud2').style.display = twoPlayer ? 'block' : 'none';
   document.getElementById('splitDivider').style.display = twoPlayer ? 'block' : 'none';
+  document.getElementById('gameOverP1').style.display = 'none';
+  document.getElementById('gameOverP2').style.display = 'none';
 
   // Reset pause state and reveal the in-game pause button.
   paused = false;
@@ -3581,6 +3628,8 @@ function endGame(won, winnerIndex) {
   document.getElementById('pauseMenu').style.display = 'none';
   document.getElementById('pauseBtn').style.display = 'none';
   document.getElementById('eliminationBanner').style.display = 'none';
+  document.getElementById('gameOverP1').style.display = 'none';
+  document.getElementById('gameOverP2').style.display = 'none';
   stopEngineSound();
   stopCrowdAmbient();
   stopBgMusic();
