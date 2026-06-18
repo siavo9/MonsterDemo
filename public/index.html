@@ -59,6 +59,22 @@ canvas { display: block; }
 }
 .color-swatch:hover { transform: scale(1.15); }
 .color-swatch.selected { border-color: #fff; transform: scale(1.2); box-shadow: 0 0 20px rgba(255,255,255,0.4); }
+/* The other player's pick is greyed out and not selectable. */
+.color-swatch.taken { opacity: 0.3; cursor: not-allowed; filter: grayscale(0.6); }
+.color-swatch.taken:hover { transform: none; }
+/* Player 1 highlights its pick in gold, Player 2 in cyan, so the two pickers
+   read as distinct at a glance. */
+#colorPicker2 .color-swatch.selected { border-color: #2fe0e0; box-shadow: 0 0 20px rgba(47,224,224,0.5); }
+
+/* PLAYERS TOGGLE (same look as the difficulty buttons) */
+#playerCountPicker { display: flex; gap: 10px; margin-bottom: 10px; }
+.players-btn {
+  padding: 10px 28px; border-radius: 25px; border: 2px solid #555;
+  background: transparent; color: #ccc; font-size: 1rem; cursor: pointer;
+  transition: all 0.2s; font-weight: 600;
+}
+.players-btn:hover { border-color: #f7c948; color: #f7c948; }
+.players-btn.selected { background: #f7c948; color: #1a0a2e; border-color: #f7c948; }
 
 /* DIFFICULTY */
 #difficultyPicker {
@@ -140,6 +156,36 @@ canvas { display: block; }
 .truck-hp-inner { height: 100%; background: #2ecc71; transition: width 0.3s; }
 .truck-name {
   font-size: 0.6rem; color: #aaa; width: 70px; text-align: right; white-space: nowrap; overflow: hidden;
+}
+
+/* SPLIT-SCREEN DIVIDER */
+#splitDivider {
+  position: fixed; top: 0; bottom: 0; left: 50%;
+  width: 4px; transform: translateX(-2px); z-index: 55;
+  background: rgba(0,0,0,0.7); box-shadow: 0 0 6px rgba(0,0,0,0.8);
+  display: none; pointer-events: none;
+}
+
+/* PLAYER 2 HUD (right half, two-player mode only) */
+#hud2 {
+  position: fixed; top: 0; right: 0; z-index: 50;
+  padding: 15px 20px; display: none;
+  pointer-events: none; text-align: right;
+}
+#hud2Label { color: #2fe0e0; font-size: 0.85rem; font-weight: 700; letter-spacing: 2px; margin-bottom: 6px; }
+#healthBar2Outer {
+  width: 250px; height: 22px; background: rgba(0,0,0,0.6);
+  border-radius: 11px; border: 2px solid rgba(255,255,255,0.3);
+  overflow: hidden; margin-left: auto;
+}
+#healthBar2Inner {
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, #2ecc71, #27ae60);
+  border-radius: 9px; transition: width 0.3s;
+}
+#boostCount2 {
+  color: #f7c948; font-size: 1.1rem; font-weight: 700;
+  margin-top: 8px;
 }
 
 /* SPEED INDICATOR */
@@ -246,8 +292,17 @@ canvas { display: block; }
     <h1>Cars 3<br>Thunder Hollow<br>Demolition Derby</h1>
     <h2>Smash. Crash. Be the Last One Standing.</h2>
 
+    <div class="section-label">Players</div>
+    <div id="playerCountPicker">
+      <button class="players-btn selected" data-players="1">1 Player</button>
+      <button class="players-btn" data-players="2">2 Players</button>
+    </div>
+
     <div class="section-label" id="pickLabel">Pick Your Character</div>
     <div id="colorPicker"></div>
+
+    <div class="section-label" id="pick2Label" style="display:none">Player 2 — Pick Your Character</div>
+    <div id="colorPicker2" style="display:none"></div>
 
     <div class="section-label">Difficulty</div>
     <div id="difficultyPicker">
@@ -267,6 +322,10 @@ canvas { display: block; }
       <span>Right stick</span> View &nbsp;|&nbsp;
       <span>X</span> Jump &nbsp;|&nbsp;
       <span>R2</span> Boost
+      <br>
+      👥 <span>Player 2:</span> <span>WASD</span> Drive &amp; Steer &nbsp;|&nbsp;
+      <span>Z</span> Jump &nbsp;|&nbsp;
+      <span>X</span> Boost
     </div>
 
     <div id="moreGames">
@@ -282,6 +341,16 @@ canvas { display: block; }
 </div>
 <div id="truckStatus"></div>
 <div id="speedIndicator"></div>
+
+<!-- SPLIT-SCREEN DIVIDER (two-player mode only) -->
+<div id="splitDivider"></div>
+
+<!-- PLAYER 2 HUD (shown only in two-player split-screen mode) -->
+<div id="hud2">
+  <div id="hud2Label">PLAYER 2</div>
+  <div id="healthBar2Outer"><div id="healthBar2Inner"></div></div>
+  <div id="boostCount2">BOOST: ⚡⚡⚡</div>
+</div>
 
 <!-- ELIMINATION BANNER (shown while spectating after the player loses) -->
 <div id="eliminationBanner">
@@ -495,8 +564,11 @@ const MAX_HEALTH = 100;
 const BOOST_FORCE = 2.5;
 const JUMP_FORCE = 0.35;
 const GRAVITY = -0.015;
-const MAX_SPEED = 1.0;
-const ACCELERATION = 0.022;
+// Top speed and acceleration were nudged down a notch so the whole field —
+// player and computer cars alike — drives at a slightly calmer pace. The AI
+// derives its speed from these same constants, so both slow together.
+const MAX_SPEED = 0.85;
+const ACCELERATION = 0.019;
 const BRAKE_FORCE = 0.025;
 const REVERSE_MAX = 0.45;
 const TURN_SPEED = 0.04;
@@ -512,7 +584,10 @@ const ENV_DAMAGE_FACTOR = 0.3;
 
 // --- GAME STATE ---
 let scene, camera, renderer;
+let camera2 = null;          // second camera, used for the split-screen right pane
 let playerIndex = 0;
+let player2Index = 1;        // which truck the second human controls (2-player mode)
+let twoPlayer = false;       // split-screen two-player mode toggled on the home screen
 let difficulty = 'easy';
 let trucks = [];
 let obstacles = [];
@@ -530,6 +605,7 @@ const gamepadPrevButtons = {};   // edge-detection state, keyed by button index
 let camYawOffset = 0;            // right-stick horizontal view orbit
 let camPitchOffset = 0;          // right-stick vertical view orbit
 let boostsLeft = 3;
+let boosts2Left = 3;         // Player 2's remaining boosts (2-player mode)
 let eliminationOrder = [];
 let confettiParticles = [];
 
@@ -807,27 +883,56 @@ function stopBgMusic() {
 // ============================================================
 // CHARACTER PICKER
 // ============================================================
-function buildColorPicker() {
-  const colorPickerEl = document.getElementById('colorPicker');
-  colorPickerEl.innerHTML = '';
+// Build one character picker. `who` is 1 or 2; selecting a swatch updates that
+// player's chosen character. The character already taken by the *other* player
+// is greyed out and not clickable so the two humans can't drive the same car.
+function buildOnePicker(containerId, who) {
+  const containerEl = document.getElementById(containerId);
+  containerEl.innerHTML = '';
+
+  const myIndex = who === 1 ? playerIndex : player2Index;
+  const otherIndex = who === 1 ? player2Index : playerIndex;
 
   CARS2_CHARACTERS.forEach((c, i) => {
     const swatch = document.createElement('div');
-    swatch.className = 'color-swatch' + (i === playerIndex ? ' selected' : '');
+    const isTaken = twoPlayer && i === otherIndex;
+    swatch.className = 'color-swatch' +
+      (i === myIndex ? ' selected' : '') +
+      (isTaken ? ' taken' : '');
     swatch.style.background = c.color;
     swatch.title = c.name;
     swatch.textContent = c.name;
     swatch.style.width = '80px';
     swatch.style.height = '55px';
     swatch.style.fontSize = '0.5rem';
-    swatch.onclick = () => {
-      document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
-      swatch.classList.add('selected');
-      playerIndex = i;
-    };
-    colorPickerEl.appendChild(swatch);
+    if (!isTaken) {
+      swatch.onclick = () => {
+        if (who === 1) playerIndex = i; else player2Index = i;
+        // Rebuild both pickers so selection + taken states stay in sync.
+        buildColorPicker();
+      };
+    }
+    containerEl.appendChild(swatch);
   });
+}
+
+function buildColorPicker() {
   if (playerIndex >= CARS2_CHARACTERS.length) playerIndex = 0;
+  if (player2Index >= CARS2_CHARACTERS.length) player2Index = 1;
+  // Keep the two players on different cars.
+  if (twoPlayer && player2Index === playerIndex) {
+    player2Index = (playerIndex + 1) % CARS2_CHARACTERS.length;
+  }
+
+  buildOnePicker('colorPicker', 1);
+
+  // Player 2's picker + label only appear in two-player mode.
+  const show2 = twoPlayer;
+  document.getElementById('pick2Label').style.display = show2 ? '' : 'none';
+  document.getElementById('colorPicker2').style.display = show2 ? '' : 'none';
+  document.getElementById('pickLabel').textContent =
+    twoPlayer ? 'Player 1 — Pick Your Character' : 'Pick Your Character';
+  if (show2) buildOnePicker('colorPicker2', 2);
 }
 
 // Difficulty picker
@@ -836,6 +941,16 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
     document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     difficulty = btn.dataset.diff;
+  };
+});
+
+// Players toggle (1 player vs. 2-player split screen)
+document.querySelectorAll('.players-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.players-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    twoPlayer = btn.dataset.players === '2';
+    buildColorPicker();
   };
 });
 
@@ -905,6 +1020,8 @@ function goToHome() {
   stopCrowdAmbient();
   stopBgMusic();
   document.getElementById('hud').style.display = 'none';
+  document.getElementById('hud2').style.display = 'none';
+  document.getElementById('splitDivider').style.display = 'none';
   document.getElementById('truckStatus').style.display = 'none';
   document.getElementById('speedIndicator').style.display = 'none';
   document.getElementById('endScreen').style.display = 'none';
@@ -2285,7 +2402,17 @@ function placeTrucks() {
 // CAMERA
 // ============================================================
 function setupCamera() {
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 300);
+  // In two-player mode each camera renders into one half of the screen, so its
+  // aspect ratio is based on half the window width.
+  const aspect = twoPlayer
+    ? (window.innerWidth / 2) / window.innerHeight
+    : window.innerWidth / window.innerHeight;
+  camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 300);
+  if (twoPlayer) {
+    camera2 = new THREE.PerspectiveCamera(60, aspect, 0.1, 300);
+  } else {
+    camera2 = null;
+  }
 }
 // Pick whose truck the camera should track. Normally it's the player, but once
 // the player is eliminated we spectate the current leader — the living truck
@@ -2303,8 +2430,10 @@ function showEliminationBanner() {
   document.getElementById('eliminationBanner').style.display = 'block';
 }
 
-function getCameraTarget() {
-  const player = trucks[playerIndex];
+// Pick a camera's subject: the given player's truck while alive, otherwise the
+// current leader (most-health living truck) so eliminated players still spectate.
+function pickTargetFor(idx) {
+  const player = trucks[idx];
   if (player && player.alive) return player;
   let leader = null, bestHealth = -Infinity;
   for (const t of trucks) {
@@ -2313,30 +2442,60 @@ function getCameraTarget() {
   return leader || player;
 }
 
-function updateCamera() {
-  const target = getCameraTarget();
-  if (!target) return;
+function getCameraTarget() { return pickTargetFor(playerIndex); }
+function getCameraTarget2() { return pickTargetFor(player2Index); }
+
+// Smoothly chase `target` with `cam`. `yawOffset`/`pitchOffset` orbit the view
+// (driven by the gamepad right stick for Player 1; zero for Player 2).
+function updateCameraFor(cam, target, yawOffset, pitchOffset) {
+  if (!cam || !target) return;
   const dist = 12;
   const height = 7;
   const focus = target.mesh.position;
-  // Right-stick view offsets orbit the camera around the truck.
-  const viewAngle = target.rotationY + camYawOffset;
+  const viewAngle = target.rotationY + yawOffset;
   const targetX = focus.x - Math.sin(viewAngle) * dist;
   const targetZ = focus.z - Math.cos(viewAngle) * dist;
-  const targetY = focus.y + height + camPitchOffset;
-  camera.position.x += (targetX - camera.position.x) * 0.12;
-  camera.position.y += (targetY - camera.position.y) * 0.12;
-  camera.position.z += (targetZ - camera.position.z) * 0.12;
+  const targetY = focus.y + height + pitchOffset;
+  cam.position.x += (targetX - cam.position.x) * 0.12;
+  cam.position.y += (targetY - cam.position.y) * 0.12;
+  cam.position.z += (targetZ - cam.position.z) * 0.12;
   // Lock the camera to a fixed horizontal distance from the truck. Smoothing
   // alone lets the camera lag behind at speed, which steadily increases the
   // follow distance and looks like an automatic zoom-out. Re-projecting onto
   // the fixed-distance circle keeps the orbit smooth while pinning the zoom.
-  const cdx = camera.position.x - focus.x;
-  const cdz = camera.position.z - focus.z;
+  const cdx = cam.position.x - focus.x;
+  const cdz = cam.position.z - focus.z;
   const cd = Math.hypot(cdx, cdz) || 1;
-  camera.position.x = focus.x + (cdx / cd) * dist;
-  camera.position.z = focus.z + (cdz / cd) * dist;
-  camera.lookAt(focus.x, focus.y + 1, focus.z);
+  cam.position.x = focus.x + (cdx / cd) * dist;
+  cam.position.z = focus.z + (cdz / cd) * dist;
+  cam.lookAt(focus.x, focus.y + 1, focus.z);
+}
+
+function updateCamera() {
+  updateCameraFor(camera, getCameraTarget(), camYawOffset, camPitchOffset);
+  if (twoPlayer) updateCameraFor(camera2, getCameraTarget2(), 0, 0);
+}
+
+// Render the scene: full-frame for one player, or a left/right split for two.
+function renderScene() {
+  if (twoPlayer && camera2) {
+    const w = window.innerWidth, h = window.innerHeight;
+    const halfW = Math.floor(w / 2);
+    renderer.setScissorTest(true);
+    // Left pane — Player 1
+    renderer.setViewport(0, 0, halfW, h);
+    renderer.setScissor(0, 0, halfW, h);
+    renderer.render(scene, camera);
+    // Right pane — Player 2
+    renderer.setViewport(halfW, 0, w - halfW, h);
+    renderer.setScissor(halfW, 0, w - halfW, h);
+    renderer.render(scene, camera2);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, w, h);
+  } else {
+    renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+    renderer.render(scene, camera);
+  }
 }
 
 // ============================================================
@@ -2562,6 +2721,7 @@ function checkRamp(t) {
 // ============================================================
 function updateAI(t, dt) {
   if (!t.alive || t.index === playerIndex) return;
+  if (twoPlayer && t.index === player2Index) return;
 
   // Stuck recovery: if a car has been crawling for a moment — pinned against a
   // wall, jammed on another car, or hung up on an obstacle — spin it around to
@@ -2814,6 +2974,21 @@ function updateHUD() {
   const mph = Math.round(speed * 150);
   document.getElementById('speedIndicator').textContent = mph + ' MPH';
 
+  // Player 2 health + boost (two-player mode).
+  if (twoPlayer) {
+    const player2 = trucks[player2Index];
+    if (player2) {
+      const pct2 = Math.max(0, player2.health / MAX_HEALTH * 100);
+      const bar2 = document.getElementById('healthBar2Inner');
+      bar2.style.width = pct2 + '%';
+      if (pct2 > 50) bar2.style.background = 'linear-gradient(90deg, #2ecc71, #27ae60)';
+      else if (pct2 > 25) bar2.style.background = 'linear-gradient(90deg, #f39c12, #e67e22)';
+      else bar2.style.background = 'linear-gradient(90deg, #e74c3c, #c0392b)';
+      document.getElementById('boostCount2').textContent =
+        'BOOST: ' + '⚡'.repeat(boosts2Left) + '·'.repeat(3 - boosts2Left);
+    }
+  }
+
   // Truck status list only needs to refresh occasionally — building this string
   // and re-parsing innerHTML for every truck every frame was a major DOM cost.
   hudFrame = (hudFrame + 1) % 6;
@@ -2823,7 +2998,8 @@ function updateHUD() {
   trucks.forEach((t, i) => {
     const hp = Math.max(0, t.health / MAX_HEALTH * 100);
     const isPlayer = i === playerIndex;
-    const label = isPlayer ? '► YOU' : '';
+    const isPlayer2 = twoPlayer && i === player2Index;
+    const label = isPlayer ? (twoPlayer ? '► P1' : '► YOU') : (isPlayer2 ? '► P2' : '');
     const opacity = t.alive ? 1 : 0.3;
     const name = t.charName || '';
     html += `<div class="truck-indicator" style="opacity:${opacity}">
@@ -2903,11 +3079,60 @@ function gameLoop(time) {
     }
   }
 
+  // PLAYER 2 INPUT (two-player split screen). Left-hand keyboard:
+  // W/S drive, A/D steer, Z jump, X boost.
+  if (twoPlayer) {
+    const player2 = trucks[player2Index];
+    if (player2 && player2.alive) {
+      let throttle2 = 0;
+      if (keys['KeyW']) throttle2 = 1;
+      else if (keys['KeyS']) throttle2 = -1;
+
+      let steer2 = 0;
+      if (keys['KeyA']) steer2 = 1;
+      else if (keys['KeyD']) steer2 = -1;
+
+      if (throttle2 > 0.05) {
+        player2.speed = Math.min(player2.speed + ACCELERATION * throttle2, MAX_SPEED);
+      } else if (throttle2 < -0.05) {
+        const amt = -throttle2;
+        if (player2.speed > 0) {
+          player2.speed -= BRAKE_FORCE * amt;
+          if (player2.speed < 0) player2.speed = 0;
+        } else {
+          player2.speed = Math.max(player2.speed - ACCELERATION * 0.6 * amt, -REVERSE_MAX);
+        }
+      } else {
+        player2.speed *= FRICTION;
+      }
+
+      if (Math.abs(steer2) > 0.05) {
+        player2.rotationY += TURN_SPEED * steer2 * (player2.speed > 0 ? 1 : player2.speed < 0 ? -1 : 0);
+      }
+
+      if (keys['KeyZ'] && player2.onGround && player2.jumpCooldown <= 0) {
+        player2.vy = JUMP_FORCE;
+        player2.onGround = false;
+        player2.jumpCooldown = 25;
+        playSound('jump');
+      }
+      if (player2.jumpCooldown > 0) player2.jumpCooldown--;
+
+      if (keys['KeyX'] && boosts2Left > 0 && !player2.boosting) {
+        player2.boosting = true;
+        player2.boostTimer = 25;
+        boosts2Left--;
+        playSound('boost');
+      }
+    }
+  }
+
   // UPDATE ALL TRUCKS
   trucks.forEach((t, i) => {
     if (!t.alive) return;
 
-    if (i !== playerIndex) updateAI(t, dt * 0.016);
+    const isHuman = i === playerIndex || (twoPlayer && i === player2Index);
+    if (!isHuman) updateAI(t, dt * 0.016);
 
     if (t.boosting) {
       t.speed = Math.min(t.speed + ACCELERATION * 3, MAX_SPEED * 1.6);
@@ -2964,7 +3189,7 @@ function gameLoop(time) {
 
       // When the player goes out, show a "You Lost" banner with their place.
       // It stays on screen while we spectate the leader until the round ends.
-      if (t.index === playerIndex) {
+      if (t.index === playerIndex && !twoPlayer) {
         showEliminationBanner();
       }
 
@@ -3007,10 +3232,12 @@ function gameLoop(time) {
     const winnerIndex = aliveTrucks.length === 1
       ? aliveTrucks[0].index
       : eliminationOrder[eliminationOrder.length - 1];
-    endGame(winnerIndex === playerIndex, winnerIndex);
+    const humanWon = winnerIndex === playerIndex ||
+      (twoPlayer && winnerIndex === player2Index);
+    endGame(humanWon, winnerIndex);
   }
 
-  renderer.render(scene, camera);
+  renderScene();
 }
 
 // ============================================================
@@ -3048,6 +3275,12 @@ async function startGame() {
   startBtn.textContent = 'START';
   startBtn.style.pointerEvents = '';
 
+  // Keep the two humans on different cars in two-player mode.
+  if (twoPlayer && player2Index === playerIndex) {
+    player2Index = (playerIndex + 1) % CARS2_CHARACTERS.length;
+  }
+  boosts2Left = 3;
+
   setupCamera();
   buildThunderHollowScene();
   placeTrucks();
@@ -3056,8 +3289,12 @@ async function startGame() {
   document.getElementById('endScreen').style.display = 'none';
   document.getElementById('eliminationBanner').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
-  document.getElementById('truckStatus').style.display = 'block';
-  document.getElementById('speedIndicator').style.display = 'block';
+  // The all-cars status list lives top-right, where Player 2's HUD goes — hide it
+  // in split-screen so they don't overlap.
+  document.getElementById('truckStatus').style.display = twoPlayer ? 'none' : 'block';
+  document.getElementById('speedIndicator').style.display = twoPlayer ? 'none' : 'block';
+  document.getElementById('hud2').style.display = twoPlayer ? 'block' : 'none';
+  document.getElementById('splitDivider').style.display = twoPlayer ? 'block' : 'none';
 
   // Reset pause state and reveal the in-game pause button.
   paused = false;
@@ -3099,7 +3336,7 @@ async function startGame() {
     if (gameRunning) return;
     updateFireFlames();
     updateCamera();
-    renderer.render(scene, camera);
+    renderScene();
     requestAnimationFrame(countdownRender);
   }
   countdownRender();
@@ -3365,27 +3602,39 @@ function endGame(won, winnerIndex) {
   if (won) {
     playSound('victory');
     spawnConfetti();
-    document.getElementById('endTitle').textContent = '🏆 YOU WIN! 🏆';
+    const winnerName = CARS2_CHARACTERS[winnerIndex].name;
+    let title = '🏆 YOU WIN! 🏆';
+    let message = `Congratulations! Your ${playerCarName} is the last ${vehicleWord} standing!`;
+    if (twoPlayer) {
+      const whichPlayer = winnerIndex === playerIndex ? 'PLAYER 1' : 'PLAYER 2';
+      title = `🏆 ${whichPlayer} WINS! 🏆`;
+      message = `${whichPlayer}'s ${winnerName} is the last ${vehicleWord} standing!`;
+    }
+    document.getElementById('endTitle').textContent = title;
     document.getElementById('endTitle').style.color = '#f7c948';
-    document.getElementById('endMessage').textContent =
-      `Congratulations! Your ${playerCarName} is the last ${vehicleWord} standing!`;
+    document.getElementById('endMessage').textContent = message;
 
     function victoryLoop() {
       updateConfetti();
       updateFireFlames();
       updateCamera();
-      renderer.render(scene, camera);
+      renderScene();
       if (confettiParticles.length > 0) requestAnimationFrame(victoryLoop);
     }
     requestAnimationFrame(victoryLoop);
   } else {
     const winnerName = CARS2_CHARACTERS[winnerIndex].name;
-    const position = totalCount - eliminationOrder.indexOf(playerIndex);
-    const suffix = position === 1 ? 'st' : position === 2 ? 'nd' : position === 3 ? 'rd' : 'th';
     document.getElementById('endTitle').textContent = 'GAME OVER';
     document.getElementById('endTitle').style.color = '#e74c3c';
-    document.getElementById('endMessage').textContent =
-      `${winnerName} won the derby! You finished ${position}${suffix} out of ${totalCount}.`;
+    if (twoPlayer) {
+      document.getElementById('endMessage').textContent =
+        `${winnerName} won the derby! Both players were knocked out.`;
+    } else {
+      const position = totalCount - eliminationOrder.indexOf(playerIndex);
+      const suffix = position === 1 ? 'st' : position === 2 ? 'nd' : position === 3 ? 'rd' : 'th';
+      document.getElementById('endMessage').textContent =
+        `${winnerName} won the derby! You finished ${position}${suffix} out of ${totalCount}.`;
+    }
   }
 
   setTimeout(() => {
@@ -3396,8 +3645,15 @@ function endGame(won, winnerIndex) {
 // --- RESIZE ---
 window.addEventListener('resize', () => {
   if (camera && renderer) {
-    camera.aspect = window.innerWidth / window.innerHeight;
+    const aspect = twoPlayer
+      ? (window.innerWidth / 2) / window.innerHeight
+      : window.innerWidth / window.innerHeight;
+    camera.aspect = aspect;
     camera.updateProjectionMatrix();
+    if (camera2) {
+      camera2.aspect = aspect;
+      camera2.updateProjectionMatrix();
+    }
     renderer.setSize(window.innerWidth, window.innerHeight);
   }
   if (celebRenderer) {
