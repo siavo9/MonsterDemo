@@ -123,6 +123,12 @@ canvas { display: block; }
   padding: 15px 20px; display: none;
   pointer-events: none;
 }
+#hudLabel { display: none; color: #f7c948; font-size: 0.85rem; font-weight: 700; letter-spacing: 2px; margin-bottom: 6px; }
+/* Two-player: Player 1 lives on the RIGHT half (their controls are the
+   right-hand arrow keys), so right-align this HUD and show its label. */
+#hud.two-player { text-align: right; }
+#hud.two-player #hudLabel { display: block; }
+#hud.two-player #healthBarOuter { margin-left: auto; }
 #healthBarOuter {
   width: 250px; height: 22px; background: rgba(0,0,0,0.6);
   border-radius: 11px; border: 2px solid rgba(255,255,255,0.3);
@@ -169,17 +175,17 @@ canvas { display: block; }
   display: none; pointer-events: none;
 }
 
-/* PLAYER 2 HUD (right half, two-player mode only) */
+/* PLAYER 2 HUD (left half, two-player mode only) */
 #hud2 {
-  position: fixed; top: 0; right: 0; z-index: 50;
+  position: fixed; top: 0; left: 0; z-index: 50;
   padding: 15px 20px; display: none;
-  pointer-events: none; text-align: right;
+  pointer-events: none; text-align: left;
 }
 #hud2Label { color: #2fe0e0; font-size: 0.85rem; font-weight: 700; letter-spacing: 2px; margin-bottom: 6px; }
 #healthBar2Outer {
   width: 250px; height: 22px; background: rgba(0,0,0,0.6);
   border-radius: 11px; border: 2px solid rgba(255,255,255,0.3);
-  overflow: hidden; margin-left: auto;
+  overflow: hidden; margin-right: auto;
 }
 #healthBar2Inner {
   width: 100%; height: 100%;
@@ -294,8 +300,9 @@ canvas { display: block; }
   margin-top: 6px; font-size: 1.1rem; font-weight: 700; color: #fff;
   text-shadow: 0 2px 6px rgba(0,0,0,0.8);
 }
-#gameOverP1 { left: 25%; }
-#gameOverP2 { left: 75%; }
+/* Player 1 is on the right half, Player 2 on the left. */
+#gameOverP1 { left: 75%; }
+#gameOverP2 { left: 25%; }
 
 #countdown {
   position: fixed; inset: 0; z-index: 90;
@@ -359,6 +366,7 @@ canvas { display: block; }
 
 <!-- HUD -->
 <div id="hud">
+  <div id="hudLabel">PLAYER 1</div>
   <div id="healthBarOuter"><div id="healthBarInner"></div></div>
   <div id="boostCount">BOOST: ⚡⚡⚡</div>
 </div>
@@ -2517,14 +2525,14 @@ function renderScene() {
     const w = window.innerWidth, h = window.innerHeight;
     const halfW = Math.floor(w / 2);
     renderer.setScissorTest(true);
-    // Left pane — Player 1
+    // Left pane — Player 2 (left-hand keyboard)
     renderer.setViewport(0, 0, halfW, h);
     renderer.setScissor(0, 0, halfW, h);
-    renderer.render(scene, camera);
-    // Right pane — Player 2
+    renderer.render(scene, camera2);
+    // Right pane — Player 1 (right-hand keyboard / arrow keys)
     renderer.setViewport(halfW, 0, w - halfW, h);
     renderer.setScissor(halfW, 0, w - halfW, h);
-    renderer.render(scene, camera2);
+    renderer.render(scene, camera);
     renderer.setScissorTest(false);
     renderer.setViewport(0, 0, w, h);
   } else {
@@ -3332,7 +3340,9 @@ async function startGame() {
   document.getElementById('endScreen').style.display = 'none';
   document.getElementById('eliminationBanner').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
-  // The all-cars status list lives top-right; in split-screen the Player 2 HUD
+  // In split-screen Player 1 occupies the right half, so right-align the P1 HUD.
+  document.getElementById('hud').classList.toggle('two-player', twoPlayer);
+  // The all-cars status list lives top-right; in split-screen the Player 1 HUD
   // also sits there, so the .two-player class drops the list below it.
   const truckStatusEl = document.getElementById('truckStatus');
   truckStatusEl.style.display = 'block';
